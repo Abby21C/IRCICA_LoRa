@@ -1,32 +1,36 @@
-# _Sample project_
+# WUR with Payload
 
-(See the README.md file in the upper level 'examples' directory for more information about examples.)
+Git to test SX1261 Wake Up with payload in signal
 
-This is the simplest buildable example. The example is used by command `idf.py create-project`
-that copies the project to user specified path and set it's name. For more information follow the [docs page](https://docs.espressif.com/projects/esp-idf/en/latest/api-guides/build-system.html#start-a-new-project)
+## Requirements  
+- OS: Ubuntu or Windows (not tested in MacOS)
+- [Visual Studio Code](https://code.visualstudio.com/download)
+- [ESP-IDF v5.3.1](https://github.com/espressif/vscode-esp-idf-extension/blob/master/docs/tutorial/install.md)  
+- The project cloned from GitHub  
+```git clone git@github.com:ecornejog/WUR-with-payload.git```
 
 
+## Visual Studio Code    
 
-## How to use example
-We encourage the users to use the example as a template for the new projects.
-A recommended way is to follow the instructions on a [docs page](https://docs.espressif.com/projects/esp-idf/en/latest/api-guides/build-system.html#start-a-new-project).
+To use Visual Studio Code properly, is recommended to use the next extensions:
+ - C/C++ extension pack
+ - Comment Anchors
+ - Git Graph
 
-## Example folder contents
-
-The project **sample_project** contains one source file in C language [main.c](main/main.c). The file is located in folder [main](main).
-
-ESP-IDF projects are built using CMake. The project build configuration is contained in `CMakeLists.txt`
-files that provide set of directives and instructions describing the project's source files and targets
-(executable, library, or both). 
-
-Below is short explanation of remaining files in the project folder.
+## Structure of project:
 
 ```
-├── CMakeLists.txt
+├── components                 Folder where all the components are defined and coded
+│   ├── ra01s
 ├── main
 │   ├── CMakeLists.txt
-│   └── main.c
+|   ├── idf_component.yml
+│   └── main.c                Main code of project
+├── CMakeLists.txt
 └── README.md                  This is the file you are currently reading
 ```
-Additionally, the sample project contains Makefile and component.mk files, used for the legacy Make based build system. 
-They are not used or needed when building with CMake and idf.py.
+
+## Using ESP-IDF extension in VSCode
+
+If all is installed properly, you'll able to see a task bar in the footer of Visual Studio Code, and in this task bar there are a lot of buttons, where you can Build, Flash, Monitor, Configure, etc.  
+Follow this [link](https://github.com/espressif/vscode-esp-idf-extension/blob/master/docs/tutorial/basic_use.md) for more information about ESP-IDF.
