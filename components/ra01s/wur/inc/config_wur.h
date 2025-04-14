@@ -2,9 +2,6 @@
 #define INC_CONFIG_WUR_H_
 
 
-
-
-#define SYNCWORD     { 0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f}
 #define SYNCWORD_LENGTH 8 //in bytes
 #define PREAMBLE_LENGTH_IN_BIT 50000 //preamble bit length
 #define PREAMBLE_DETECTION_LENGTH SX126X_GFSK_PREAMBLE_DETECTOR_MIN_16BITS //!< Preamble detection length /!\ 24bits max for 1ms RX time

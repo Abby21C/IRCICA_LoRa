@@ -93,9 +93,9 @@ RTC_DATA_ATTR int number_of_wake_up = -1;
 
 #define TAG "main" //for logs
 
-#define RX_WUR
+//#define RX_WUR
 
-//#define TX_WUR
+#define TX_WUR
 
 context_t sx_wur_param;
 context_t *sx_parameters = &sx_wur_param;
