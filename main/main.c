@@ -108,13 +108,15 @@ void run_TX_WUR(void *pvParameters)
 {
     uint64_t exec_time = 0;
     uint8_t compteur = 0;
-    uint8_t data[256] = {0};
+    uint8_t payload[] = {0x01}; //up LED
+    //uint8_t data[256] = {0};
     while (1)
     {
         Sx1261_InitParam_WUR(sx_parameters, SYNCWORD);
         Sx1261_InitFonction_WUR(sx_parameters);
         ESP_LOGI(TAG, "Sx1261_SendSignal_WUR");
-        Sx1261_Send_WuR_Signal(sx_parameters,data, 0);
+        //Sx1261_Send_WuR_Signal(sx_parameters,data, 0); 
+        Sx1261_Send_WuR_Signal(sx_parameters, payload, 1); 
         compteur++;
         ESP_LOGI(TAG, "number of signal sended: %d", compteur);
         vTaskDelay(pdMS_TO_TICKS(30000));
@@ -165,6 +167,18 @@ void run_RX_WUR(void *pvParameters)
             //ESP_LOGI(TAG, "Sx1261_WurMode");
             ESP_LOGW(TAG, "DIO1 Level after reset %d", gpio_get_level(CONFIG_DIO1_GPIO));
             //Sx1261_WurMode(sx_parameters, 999, 1);
+
+            uint8_t received_payload[10] = {0};  
+            sx126x_read_buffer(sx_parameters, 0, received_payload, 1); 
+
+        if (received_payload[0] == 0x01) {
+        ESP_LOGI(TAG, "Receive payload, LED ON");
+        s_led_state = 1;
+        blink_led();
+        vTaskDelay(pdMS_TO_TICKS(500));
+        s_led_state = 0;
+        blink_led();
+        }
         }
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
