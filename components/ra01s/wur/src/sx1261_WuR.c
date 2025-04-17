@@ -64,7 +64,7 @@ void Sx1261_InitParam_WUR(context_t *context, uint8_t* syncword)
 	context->pkt_parameters.sync_word_len_in_bits = 8*SYNCWORD_LENGTH;	//!< Sync word length in bits (multiply by 8 because SYNCWORD_LENGTH is in bytes )
 	context->pkt_parameters.address_filtering = SX126X_GFSK_ADDRESS_FILTERING_DISABLE;	//!< Address filtering configuration
 	context->pkt_parameters.header_type = SX126X_GFSK_PKT_FIX_LEN;	//!< Header type
-	context->pkt_parameters.pld_len_in_bytes = 10;	//!< Payload length in bytes
+	context->pkt_parameters.pld_len_in_bytes = 1;	//!< Payload length in bytes
 	context->pkt_parameters.crc_type = SX126X_GFSK_CRC_OFF;	//!< CRC type configuration
 	context->pkt_parameters.dc_free = SX126X_GFSK_DC_FREE_OFF;	//!< Whitening configuration
 }
@@ -95,22 +95,29 @@ void Sx1261_InitFonction_WUR(context_t *context)
 
 void Sx1261_Send_WuR_Signal( context_t *context, uint8_t* data, uint8_t length )
 {
-	uint8_t n_length = length;
-	if (n_length > 255) {
-		n_length = 255;
+	//uint8_t n_length = length;
+	if (length > 255) {
+		length = 255;
 	}
-	n_length = length; // length in bytes (for Payload successfully sent)
+	//n_length = length; // length in bytes (for Payload successfully sent)
 
 	ESP_LOGI(TAG, "Payload to send:");
 	for (int i = 0; i < length; i++) {
 		ESP_LOGI(TAG, "Byte[%d] = 0x%02X", i, data[i]);
+
 	}
 
+	context->pkt_parameters.pld_len_in_bytes = length;
+	sx126x_set_gfsk_pkt_params(context, &(context->pkt_parameters));
 
-	(void) sx126x_set_dio_irq_params(context, SX126X_IRQ_ALL, SX126X_IRQ_ALL, SX126X_IRQ_NONE, SX126X_IRQ_NONE);
+	sx126x_write_buffer(context, 0x00, data, length);
+
+
+	/*(void) sx126x_set_dio_irq_params(context, SX126X_IRQ_ALL, SX126X_IRQ_ALL, SX126X_IRQ_NONE, SX126X_IRQ_NONE);
     sx126x_clear_irq_status(context, SX126X_IRQ_ALL);
 	sx126x_write_buffer( context, 0,  data, length );
-
+	*/
+	
 	delay(10);
 	sx126x_set_tx(context, 2000);
 }

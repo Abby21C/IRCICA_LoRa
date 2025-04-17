@@ -93,9 +93,9 @@ RTC_DATA_ATTR int number_of_wake_up = -1;
 
 #define TAG "main" //for logs
 
-//#define RX_WUR
+#define RX_WUR
 
-#define TX_WUR
+//#define TX_WUR
 
 context_t sx_wur_param;
 context_t *sx_parameters = &sx_wur_param;
@@ -155,6 +155,8 @@ void run_RX_WUR(void *pvParameters)
 			
         	vTaskDelay(pdMS_TO_TICKS(1000));
 			//on repasse en sommeil
+
+            
 			ESP_LOGI(TAG, "Sx1261_WurMode");
             sx126x_clear_irq_status( sx_parameters, &sx126x_irq_mask );
             sx126x_reset(sx_parameters);
@@ -168,8 +170,16 @@ void run_RX_WUR(void *pvParameters)
             ESP_LOGW(TAG, "DIO1 Level after reset %d", gpio_get_level(CONFIG_DIO1_GPIO));
             //Sx1261_WurMode(sx_parameters, 999, 1);
 
-            uint8_t received_payload[10] = {0};  
+            /*uint8_t received_payload[10] = {0};  
             sx126x_read_buffer(sx_parameters, 0, received_payload, 1); 
+            */
+            sx126x_rx_buffer_status_t rx_status;
+            sx126x_get_rx_buffer_status(sx_parameters, &rx_status);
+
+            uint8_t received_payload[256] = {0};
+            sx126x_read_buffer(sx_parameters, rx_status.buffer_start_pointer, received_payload, rx_status.pld_len_in_bytes);
+        
+            ESP_LOGI(TAG, "Raw payload byte = 0x%02X", received_payload[0]);
 
         if (received_payload[0] == 0x01) {
         ESP_LOGI(TAG, "Receive payload, LED ON");
@@ -315,6 +325,9 @@ void app_main(void)
         Sx1261_WurMode(sx_parameters, 999, 1);
         ESP_LOGI("INTERRUPTION", "\033[0mWuR interrupt enable");
         vTaskDelay(pdMS_TO_TICKS(1000));
+
+        xTaskCreate(&run_RX_WUR, "run_RX_WUR", 1024*4, NULL, 5, NULL);
+        /*
         uint64_t ext_wakeup_pins_mask = (1ULL << CONFIG_DIO1_GPIO);
         
         rtc_gpio_set_direction_in_sleep(CONFIG_DIO1_GPIO,RTC_GPIO_MODE_INPUT_ONLY);
@@ -331,6 +344,7 @@ void app_main(void)
     
         esp_sleep_enable_ext1_wakeup(ext_wakeup_pins_mask, ESP_EXT1_WAKEUP_ANY_HIGH);
         esp_deep_sleep_start();
+        */
 
 
     #endif
