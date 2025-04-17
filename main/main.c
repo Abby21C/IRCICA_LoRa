@@ -156,6 +156,26 @@ void run_RX_WUR(void *pvParameters)
         	vTaskDelay(pdMS_TO_TICKS(1000));
 			//on repasse en sommeil
 
+                    /*uint8_t received_payload[10] = {0};  
+        sx126x_read_buffer(sx_parameters, 0, received_payload, 1); 
+                */
+        sx126x_rx_buffer_status_t rx_status;
+        sx126x_get_rx_buffer_status(sx_parameters, &rx_status);
+
+        uint8_t received_payload[256] = {0};
+        sx126x_read_buffer(sx_parameters, rx_status.buffer_start_pointer, received_payload, rx_status.pld_len_in_bytes);
+        
+        ESP_LOGI(TAG, "Raw payload byte = 0x%02X", received_payload[0]);
+
+        if (received_payload[0] == 0x01) {
+        ESP_LOGI(TAG, "Receive payload, LED ON");
+        s_led_state = 1;
+        blink_led();
+        vTaskDelay(pdMS_TO_TICKS(500));
+        s_led_state = 0;
+        blink_led();
+        }
+
             
 			ESP_LOGI(TAG, "Sx1261_WurMode");
             sx126x_clear_irq_status( sx_parameters, &sx126x_irq_mask );
@@ -170,25 +190,7 @@ void run_RX_WUR(void *pvParameters)
             ESP_LOGW(TAG, "DIO1 Level after reset %d", gpio_get_level(CONFIG_DIO1_GPIO));
             //Sx1261_WurMode(sx_parameters, 999, 1);
 
-            /*uint8_t received_payload[10] = {0};  
-            sx126x_read_buffer(sx_parameters, 0, received_payload, 1); 
-            */
-            sx126x_rx_buffer_status_t rx_status;
-            sx126x_get_rx_buffer_status(sx_parameters, &rx_status);
-
-            uint8_t received_payload[256] = {0};
-            sx126x_read_buffer(sx_parameters, rx_status.buffer_start_pointer, received_payload, rx_status.pld_len_in_bytes);
-        
-            ESP_LOGI(TAG, "Raw payload byte = 0x%02X", received_payload[0]);
-
-        if (received_payload[0] == 0x01) {
-        ESP_LOGI(TAG, "Receive payload, LED ON");
-        s_led_state = 1;
-        blink_led();
-        vTaskDelay(pdMS_TO_TICKS(500));
-        s_led_state = 0;
-        blink_led();
-        }
+       
         }
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
