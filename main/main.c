@@ -54,6 +54,25 @@ static void blink_led(void)
     }
 }
 
+static void show_color_led(uint8_t color_code)
+{
+    switch (color_code) {
+        case 1: // WHITE
+            led_strip_set_pixel(led_strip, 0, 16, 16, 16);
+            break;
+        case 2: // RED
+            led_strip_set_pixel(led_strip, 0, 64, 0, 0);
+            break;
+        case 3: // GREEN
+            led_strip_set_pixel(led_strip, 0, 0, 64, 0);
+            break;
+        default:
+            led_strip_clear(led_strip);
+            return;
+    }
+    led_strip_refresh(led_strip);
+}
+
 static void configure_led(void)
 {
     ESP_LOGI(TAG, "Example configured to blink addressable LED!");
@@ -93,9 +112,9 @@ RTC_DATA_ATTR int number_of_wake_up = -1;
 
 #define TAG "main" //for logs
 
-#define RX_WUR
+//#define RX_WUR
 
-//#define TX_WUR
+#define TX_WUR
 
 context_t sx_wur_param;
 context_t *sx_parameters = &sx_wur_param;
@@ -108,7 +127,7 @@ void run_TX_WUR(void *pvParameters)
 {
     uint64_t exec_time = 0;
     uint8_t compteur = 0;
-    uint8_t payload[] = {0x01}; //up LED
+    uint8_t payload[] = {0x03}; //up LED
     //uint8_t data[256] = {0};
     while (1)
     {
@@ -119,7 +138,7 @@ void run_TX_WUR(void *pvParameters)
         Sx1261_Send_WuR_Signal(sx_parameters, payload, 1); 
         compteur++;
         ESP_LOGI(TAG, "number of signal sended: %d", compteur);
-        vTaskDelay(pdMS_TO_TICKS(30000));
+        vTaskDelay(pdMS_TO_TICKS(10000));
 	}
 }
 
@@ -175,6 +194,27 @@ void run_RX_WUR(void *pvParameters)
         s_led_state = 0;
         blink_led();
         }
+
+        uint8_t color_code = 0;
+        if (received_payload[0] == 0x01) {
+            color_code = 1; // WHITE
+        } else if (received_payload[0] == 0x02) {
+            color_code = 2; // RED
+        } else if (received_payload[0] == 0x03) {
+            color_code = 3; // GREEN
+        }
+
+        show_color_led(color_code);
+        vTaskDelay(pdMS_TO_TICKS(500));
+        show_color_led(0); //clean the led
+
+            ESP_LOGI(TAG, "Sx1261_WurMode");
+            sx126x_clear_irq_status( sx_parameters, &sx126x_irq_mask );
+            sx126x_reset(sx_parameters);
+            ESP_LOGI(TAG, "Sx1261_InitParamRX");
+            Sx1261_InitParam_WUR(sx_parameters, SYNCWORD);
+            ESP_LOGI(TAG, "Sx1261_InitFonction");
+            Sx1261_InitFonction_WUR(sx_parameters);
 
             
 			ESP_LOGI(TAG, "Sx1261_WurMode");
