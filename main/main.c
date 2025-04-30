@@ -61,10 +61,10 @@ static void show_color_led(uint8_t color_code)
             led_strip_set_pixel(led_strip, 0, 16, 16, 16);
             break;
         case 2: // RED
-            led_strip_set_pixel(led_strip, 0, 64, 0, 0);
+            led_strip_set_pixel(led_strip, 0, 48, 0, 0);
             break;
         case 3: // GREEN
-            led_strip_set_pixel(led_strip, 0, 0, 64, 0);
+            led_strip_set_pixel(led_strip, 0, 0, 48, 0);
             break;
         default:
             led_strip_clear(led_strip);
@@ -91,6 +91,7 @@ static void configure_led(void)
     led_strip_clear(led_strip);
 }
 
+
 RTC_DATA_ATTR int number_of_wake_up = -1;
 
 /**
@@ -112,12 +113,40 @@ RTC_DATA_ATTR int number_of_wake_up = -1;
 
 #define TAG "main" //for logs
 
-//#define RX_WUR
+#define RX_WUR
 
-#define TX_WUR
+//#define TX_WUR
 
 context_t sx_wur_param;
 context_t *sx_parameters = &sx_wur_param;
+
+
+static void send_payload(void)
+{
+    uint8_t payload[] = {7, 0x06, 0x8B, 0x3F, 0x42, 0x36, 0x4F, 0x00};
+    ESP_LOGI(TAG, "Sending payload with %d bytes", sizeof(payload));
+
+    Sx1261_InitParam_WUR(sx_parameters, SYNCWORD);
+    Sx1261_InitFonction_WUR(sx_parameters);
+    Sx1261_Send_WuR_Signal(sx_parameters, payload, sizeof(payload));
+}
+
+
+static void receive_varlen_payload(void)
+{
+    sx126x_rx_buffer_status_t rx_status;
+    sx126x_get_rx_buffer_status(sx_parameters, &rx_status);
+
+    uint8_t received_payload[256] = {0};
+    sx126x_read_buffer(sx_parameters, rx_status.buffer_start_pointer, received_payload, rx_status.pld_len_in_bytes);
+
+    ESP_LOGI(TAG, "Received payload (%d bytes):", rx_status.pld_len_in_bytes);
+    for (int i = 0; i < rx_status.pld_len_in_bytes; i++) {
+        ESP_LOGI(TAG, "Byte[%d] = 0x%02X", i, received_payload[i]);
+    }
+
+    
+}
 
 /**
  * @brief simple task that send a WuB each 3 secondes
@@ -127,15 +156,18 @@ void run_TX_WUR(void *pvParameters)
 {
     uint64_t exec_time = 0;
     uint8_t compteur = 0;
-    uint8_t payload[] = {0x03}; //up LED
+    //uint8_t payload[] = {0x03}; //up LED
     //uint8_t data[256] = {0};
     while (1)
     {
-        Sx1261_InitParam_WUR(sx_parameters, SYNCWORD);
+        /*Sx1261_InitParam_WUR(sx_parameters, SYNCWORD);
         Sx1261_InitFonction_WUR(sx_parameters);
         ESP_LOGI(TAG, "Sx1261_SendSignal_WUR");
         //Sx1261_Send_WuR_Signal(sx_parameters,data, 0); 
         Sx1261_Send_WuR_Signal(sx_parameters, payload, 1); 
+        */
+
+        send_payload();
         compteur++;
         ESP_LOGI(TAG, "number of signal sended: %d", compteur);
         vTaskDelay(pdMS_TO_TICKS(10000));
@@ -178,15 +210,26 @@ void run_RX_WUR(void *pvParameters)
                     /*uint8_t received_payload[10] = {0};  
         sx126x_read_buffer(sx_parameters, 0, received_payload, 1); 
                 */
-        sx126x_rx_buffer_status_t rx_status;
+        
+        /*       sx126x_rx_buffer_status_t rx_status;
         sx126x_get_rx_buffer_status(sx_parameters, &rx_status);
 
         uint8_t received_payload[256] = {0};
         sx126x_read_buffer(sx_parameters, rx_status.buffer_start_pointer, received_payload, rx_status.pld_len_in_bytes);
         
-        ESP_LOGI(TAG, "Raw payload byte = 0x%02X", received_payload[0]);
+        //ESP_LOGI(TAG, "Raw payload byte = 0x%02X", received_payload[0]);
 
-        if (received_payload[0] == 0x01) {
+        ESP_LOGI(TAG, "Received payload (%d bytes):", rx_status.pld_len_in_bytes);
+        for (int i = 0; i < rx_status.pld_len_in_bytes; i++) {
+            ESP_LOGI(TAG, "Byte[%d] = 0x%02X", i, received_payload[i]);
+        }
+
+        */
+        
+        receive_varlen_payload();
+
+        /*
+        if (received_payload[0] == 0x01) {          //have to put in the fuction receive_varlen_payload if needed
         ESP_LOGI(TAG, "Receive payload, LED ON");
         s_led_state = 1;
         blink_led();
@@ -207,6 +250,8 @@ void run_RX_WUR(void *pvParameters)
         show_color_led(color_code);
         vTaskDelay(pdMS_TO_TICKS(500));
         show_color_led(0); //clean the led
+        */
+
 
             ESP_LOGI(TAG, "Sx1261_WurMode");
             sx126x_clear_irq_status( sx_parameters, &sx126x_irq_mask );

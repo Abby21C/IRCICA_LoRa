@@ -63,8 +63,9 @@ void Sx1261_InitParam_WUR(context_t *context, uint8_t* syncword)
 	context->pkt_parameters.preamble_detector = PREAMBLE_DETECTION_LENGTH; //!< Preamble detection length /!\ 24bits max for 1ms RX time
 	context->pkt_parameters.sync_word_len_in_bits = 8*SYNCWORD_LENGTH;	//!< Sync word length in bits (multiply by 8 because SYNCWORD_LENGTH is in bytes )
 	context->pkt_parameters.address_filtering = SX126X_GFSK_ADDRESS_FILTERING_DISABLE;	//!< Address filtering configuration
-	context->pkt_parameters.header_type = SX126X_GFSK_PKT_FIX_LEN;	//!< Header type
-	context->pkt_parameters.pld_len_in_bytes = 1;	//!< Payload length in bytes
+	//context->pkt_parameters.header_type = SX126X_GFSK_PKT_FIX_LEN;	//!< Header type
+	context->pkt_parameters.header_type = SX126X_GFSK_PKT_VAR_LEN;	//!< New Header type suit to payload length
+	context->pkt_parameters.pld_len_in_bytes = 64;	//!< Payload length in bytes
 	context->pkt_parameters.crc_type = SX126X_GFSK_CRC_OFF;	//!< CRC type configuration
 	context->pkt_parameters.dc_free = SX126X_GFSK_DC_FREE_OFF;	//!< Whitening configuration
 }
