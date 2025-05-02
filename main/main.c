@@ -113,22 +113,32 @@ RTC_DATA_ATTR int number_of_wake_up = -1;
 
 #define TAG "main" //for logs
 
-#define RX_WUR
+//#define RX_WUR
 
-//#define TX_WUR
+#define TX_WUR
 
 context_t sx_wur_param;
 context_t *sx_parameters = &sx_wur_param;
 
 
-static void send_payload(void)
+/*static void send_payload(void)
 {
-    uint8_t payload[] = {7, 0x06, 0x8B, 0x3F, 0x42, 0x36, 0x4F, 0x00};
+    uint8_t payload[] = {0x06, 0x8B, 0x3F, 0x42, 0x36, 0x4F, 0x00};
     ESP_LOGI(TAG, "Sending payload with %d bytes", sizeof(payload));
 
     Sx1261_InitParam_WUR(sx_parameters, SYNCWORD);
     Sx1261_InitFonction_WUR(sx_parameters);
     Sx1261_Send_WuR_Signal(sx_parameters, payload, sizeof(payload));
+}
+*/
+
+void send_payload(uint8_t* payload, size_t length)
+{
+    ESP_LOGI(TAG, "Sending payload with %d bytes", length);
+
+    Sx1261_InitParam_WUR(sx_parameters, SYNCWORD);
+    Sx1261_InitFonction_WUR(sx_parameters);
+    Sx1261_Send_WuR_Signal(sx_parameters, payload, length);
 }
 
 
@@ -145,6 +155,27 @@ static void receive_varlen_payload(void)
         ESP_LOGI(TAG, "Byte[%d] = 0x%02X", i, received_payload[i]);
     }
 
+    if (received_payload[0] == 0x01) {          //have to put in the fuction receive_varlen_payload if needed
+        ESP_LOGI(TAG, "Receive payload, LED ON");
+        s_led_state = 1;
+        blink_led();
+        vTaskDelay(pdMS_TO_TICKS(500));
+        s_led_state = 0;
+        blink_led();
+        }
+
+        uint8_t color_code = 0;
+        if (received_payload[0] == 0x01) {
+            color_code = 1; // WHITE
+        } else if (received_payload[0] == 0x02) {
+            color_code = 2; // RED
+        } else if (received_payload[0] == 0x03) {
+            color_code = 3; // GREEN
+        }
+
+        show_color_led(color_code);
+        vTaskDelay(pdMS_TO_TICKS(500));
+        show_color_led(0); //clean the led
     
 }
 
@@ -167,7 +198,11 @@ void run_TX_WUR(void *pvParameters)
         Sx1261_Send_WuR_Signal(sx_parameters, payload, 1); 
         */
 
-        send_payload();
+        //send_payload();
+
+        uint8_t action1[] = {0x03};
+        send_payload(action1, sizeof(action1));
+
         compteur++;
         ESP_LOGI(TAG, "number of signal sended: %d", compteur);
         vTaskDelay(pdMS_TO_TICKS(10000));
