@@ -91,6 +91,21 @@ static void configure_led(void)
     led_strip_clear(led_strip);
 }
 
+typedef enum {
+    PAYLOAD_TYPE_ALLINFO = 0,
+    PAYLOAD_TYPE_LED_WHITE  = 1,
+    PAYLOAD_TYPE_LED_RED    = 2,
+    PAYLOAD_TYPE_LED_GREEN  = 3
+} payload_type_t;
+
+static const uint8_t PAYLOAD_DATA_ALLINFO[] = {
+    0x06, 0x8B, 0x3F, 0x42, 0x36, 0x4F,
+    0x00, 0x5A, 0x8B, 0x21, 0x11, 0x2C
+};
+
+static const uint8_t PAYLOAD_LED_WHITE[] = { PAYLOAD_TYPE_LED_WHITE };
+static const uint8_t PAYLOAD_LED_RED[]   = { PAYLOAD_TYPE_LED_RED };
+static const uint8_t PAYLOAD_LED_GREEN[] = { PAYLOAD_TYPE_LED_GREEN };
 
 RTC_DATA_ATTR int number_of_wake_up = -1;
 
@@ -113,34 +128,47 @@ RTC_DATA_ATTR int number_of_wake_up = -1;
 
 #define TAG "main" //for logs
 
-//#define RX_WUR
+#define RX_WUR
 
-#define TX_WUR
+//#define TX_WUR
 
 context_t sx_wur_param;
 context_t *sx_parameters = &sx_wur_param;
 
 
-/*static void send_payload(void)
+
+static void send_payload(payload_type_t type)
 {
-    uint8_t payload[] = {0x06, 0x8B, 0x3F, 0x42, 0x36, 0x4F, 0x00};
-    ESP_LOGI(TAG, "Sending payload with %d bytes", sizeof(payload));
+    const uint8_t *payload = NULL;
+    size_t length = 0;
 
-    Sx1261_InitParam_WUR(sx_parameters, SYNCWORD);
-    Sx1261_InitFonction_WUR(sx_parameters);
-    Sx1261_Send_WuR_Signal(sx_parameters, payload, sizeof(payload));
-}
-*/
+    switch (type) {
+        case PAYLOAD_TYPE_ALLINFO:
+            payload = PAYLOAD_DATA_ALLINFO;
+            length = sizeof(PAYLOAD_DATA_ALLINFO);
+            break;
+        case PAYLOAD_TYPE_LED_WHITE:
+            payload = PAYLOAD_LED_WHITE;
+            length = sizeof(PAYLOAD_LED_WHITE);
+            break;
+        case PAYLOAD_TYPE_LED_RED:
+            payload = PAYLOAD_LED_RED;
+            length = sizeof(PAYLOAD_LED_RED);
+            break;
+        case PAYLOAD_TYPE_LED_GREEN:
+            payload = PAYLOAD_LED_GREEN;
+            length = sizeof(PAYLOAD_LED_GREEN);
+            break;
+        default:
+            ESP_LOGW(TAG, "Unknown payload type.");
+            return;
+    }
 
-void send_payload(uint8_t* payload, size_t length)
-{
-    ESP_LOGI(TAG, "Sending payload with %d bytes", length);
-
+    ESP_LOGI(TAG, "Sending payload type %d with %d bytes", type, (int)length);
     Sx1261_InitParam_WUR(sx_parameters, SYNCWORD);
     Sx1261_InitFonction_WUR(sx_parameters);
     Sx1261_Send_WuR_Signal(sx_parameters, payload, length);
 }
-
 
 static void receive_varlen_payload(void)
 {
@@ -148,36 +176,46 @@ static void receive_varlen_payload(void)
     sx126x_get_rx_buffer_status(sx_parameters, &rx_status);
 
     uint8_t received_payload[256] = {0};
-    sx126x_read_buffer(sx_parameters, rx_status.buffer_start_pointer, received_payload, rx_status.pld_len_in_bytes);
+    sx126x_read_buffer(sx_parameters, rx_status.buffer_start_pointer,
+                       received_payload, rx_status.pld_len_in_bytes);
 
     ESP_LOGI(TAG, "Received payload (%d bytes):", rx_status.pld_len_in_bytes);
     for (int i = 0; i < rx_status.pld_len_in_bytes; i++) {
         ESP_LOGI(TAG, "Byte[%d] = 0x%02X", i, received_payload[i]);
     }
 
-    if (received_payload[0] == 0x01) {          //have to put in the fuction receive_varlen_payload if needed
+    payload_type_t received_type = (payload_type_t)received_payload[0];
+
+    if (received_type == PAYLOAD_TYPE_LED_WHITE) {
         ESP_LOGI(TAG, "Receive payload, LED ON");
         s_led_state = 1;
         blink_led();
         vTaskDelay(pdMS_TO_TICKS(500));
         s_led_state = 0;
         blink_led();
-        }
+    }
 
-        uint8_t color_code = 0;
-        if (received_payload[0] == 0x01) {
-            color_code = 1; // WHITE
-        } else if (received_payload[0] == 0x02) {
-            color_code = 2; // RED
-        } else if (received_payload[0] == 0x03) {
-            color_code = 3; // GREEN
-        }
-
-        show_color_led(color_code);
-        vTaskDelay(pdMS_TO_TICKS(500));
-        show_color_led(0); //clean the led
+    uint8_t color_code = 0;
+    switch (received_type) {
+        case PAYLOAD_TYPE_LED_WHITE:
+            color_code = 1;
+            break;
+        case PAYLOAD_TYPE_LED_RED:
+            color_code = 2;
+            break;
+        case PAYLOAD_TYPE_LED_GREEN:
+            color_code = 3;
+            break;
+        default:
+            break;
+    }
     
+    show_color_led(color_code);
+    vTaskDelay(pdMS_TO_TICKS(500));
+    show_color_led(0);
+
 }
+
 
 /**
  * @brief simple task that send a WuB each 3 secondes
@@ -187,8 +225,7 @@ void run_TX_WUR(void *pvParameters)
 {
     uint64_t exec_time = 0;
     uint8_t compteur = 0;
-    //uint8_t payload[] = {0x03}; //up LED
-    //uint8_t data[256] = {0};
+    
     while (1)
     {
         /*Sx1261_InitParam_WUR(sx_parameters, SYNCWORD);
@@ -198,10 +235,13 @@ void run_TX_WUR(void *pvParameters)
         Sx1261_Send_WuR_Signal(sx_parameters, payload, 1); 
         */
 
-        //send_payload();
 
-        uint8_t action1[] = {0x03};
-        send_payload(action1, sizeof(action1));
+        //send_payload();
+        send_payload(PAYLOAD_TYPE_ALLINFO);
+
+        /*static const uint8_t PAYLOAD_LED_RED[] = { PAYLOAD_TYPE_LED_RED };
+        send_payload(PAYLOAD_TYPE_LED_RED);
+        */
 
         compteur++;
         ESP_LOGI(TAG, "number of signal sended: %d", compteur);
@@ -242,24 +282,7 @@ void run_RX_WUR(void *pvParameters)
         	vTaskDelay(pdMS_TO_TICKS(1000));
 			//on repasse en sommeil
 
-                    /*uint8_t received_payload[10] = {0};  
-        sx126x_read_buffer(sx_parameters, 0, received_payload, 1); 
-                */
         
-        /*       sx126x_rx_buffer_status_t rx_status;
-        sx126x_get_rx_buffer_status(sx_parameters, &rx_status);
-
-        uint8_t received_payload[256] = {0};
-        sx126x_read_buffer(sx_parameters, rx_status.buffer_start_pointer, received_payload, rx_status.pld_len_in_bytes);
-        
-        //ESP_LOGI(TAG, "Raw payload byte = 0x%02X", received_payload[0]);
-
-        ESP_LOGI(TAG, "Received payload (%d bytes):", rx_status.pld_len_in_bytes);
-        for (int i = 0; i < rx_status.pld_len_in_bytes; i++) {
-            ESP_LOGI(TAG, "Byte[%d] = 0x%02X", i, received_payload[i]);
-        }
-
-        */
         
         receive_varlen_payload();
 
@@ -449,9 +472,10 @@ void app_main(void)
         vTaskDelay(pdMS_TO_TICKS(1000));
 
         xTaskCreate(&run_RX_WUR, "run_RX_WUR", 1024*4, NULL, 5, NULL);
-        /*
+        
         uint64_t ext_wakeup_pins_mask = (1ULL << CONFIG_DIO1_GPIO);
         
+        /*
         rtc_gpio_set_direction_in_sleep(CONFIG_DIO1_GPIO,RTC_GPIO_MODE_INPUT_ONLY);
         rtc_gpio_set_direction_in_sleep(CONFIG_BUSY_GPIO,RTC_GPIO_MODE_INPUT_ONLY);
         rtc_gpio_set_direction_in_sleep(CONFIG_NSS_GPIO,RTC_GPIO_MODE_OUTPUT_ONLY);

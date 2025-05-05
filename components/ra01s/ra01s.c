@@ -111,8 +111,9 @@ void sx1261_init(void)
 	gpio_set_direction(SX126x_SPI_SELECT, GPIO_MODE_OUTPUT);
 	gpio_set_level(SX126x_SPI_SELECT, 1);
 
-	gpio_reset_pin(SX126x_RESET);
+	/*gpio_reset_pin(SX126x_RESET);
 	gpio_set_direction(SX126x_RESET, GPIO_MODE_OUTPUT);
+	*/
 	
 	gpio_reset_pin(SX126x_BUSY);
 	gpio_set_direction(SX126x_BUSY, GPIO_MODE_INPUT);
@@ -162,7 +163,7 @@ void sx1261_init(void)
 		ESP_LOGI(TAG, "spi_bus_add_device=%d",ret);
 	}
 	assert(ret==ESP_OK);
-	Reset();
+	//Reset();
 #if 0
 	pinMode(SX126x_SPI_SELECT, OUTPUT);
 	pinMode(SX126x_RESET, OUTPUT);
