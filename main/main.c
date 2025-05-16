@@ -18,7 +18,7 @@
 #include "driver/rtc_io.h"
 #include "esp_wifi.h"
 #include "esp_netif.h"
-#include "esp_event.h"
+#include "esp_http_server.h"
 
 #include "esp_log.h"
 #include "led_strip.h"
@@ -92,6 +92,32 @@ static void configure_led(void)
     ESP_ERROR_CHECK(led_strip_new_spi_device(&strip_config, &spi_config, &led_strip));
     /* Set all LED off to clear all pixels */
     led_strip_clear(led_strip);
+}
+
+
+esp_err_t firmware_get_handler(httpd_req_t *req) {
+        extern const uint8_t binary_start[] asm("_binary_firmware_bin_start");
+        extern const uint8_t binary_end[]   asm("_binary_firmware_bin_end");
+        const size_t binary_size = binary_end - binary_start;
+
+        httpd_resp_set_type(req, "application/octet-stream");
+        httpd_resp_send(req, (const char *)binary_start, binary_size);
+        return ESP_OK;
+    }
+
+void start_file_server(void) {
+    httpd_handle_t server = NULL;
+    httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+    httpd_start(&server, &config);
+
+    httpd_uri_t firmware_uri = {
+        .uri      = "/firmware.bin",
+        .method   = HTTP_GET,
+        .handler  = firmware_get_handler,
+        .user_ctx = NULL
+    };
+
+    httpd_register_uri_handler(server, &firmware_uri);
 }
 
 typedef enum {
@@ -480,12 +506,25 @@ void app_main(void)
 
     ESP_LOGI(TAG, "Wi-Fi SoftAP started. SSID:%s password:%s", "ESP32_HOTSPOT", "12345678");
 
+    esp_netif_ip_info_t ip_info;
+    esp_netif_t *ap_netif = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
+    if (ap_netif == NULL) {
+        ESP_LOGE(TAG, "Failed to get AP netif");
+    } else {
+        esp_netif_get_ip_info(ap_netif, &ip_info);
+        ESP_LOGI(TAG, "SoftAP IP Address: " IPSTR, IP2STR(&ip_info.ip));
+        ESP_LOGI(TAG, "SoftAP Gateway:   " IPSTR, IP2STR(&ip_info.gw));
+        ESP_LOGI(TAG, "SoftAP Netmask:   " IPSTR, IP2STR(&ip_info.netmask));
+    }
 
-
+    //Start HTTP Server
+    start_file_server();
+    //ESP_LOGI(TAG, "HTTP server for firmware.bin is now running.");
+    ESP_LOGI("OTA_SERVER", "HTTP server started. You can access http://192.168.4.1/firmware.bin");
 
 
     //sx1261_init();
-/*  PARTIE WUR*/
+    /*  PARTIE WUR*/
     #ifdef TX_WUR
         sx1261_init();
         sx126x_reset(sx_parameters);
