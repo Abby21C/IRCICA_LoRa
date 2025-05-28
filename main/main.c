@@ -19,10 +19,15 @@
 #include "esp_wifi.h"
 #include "esp_netif.h"
 #include "esp_http_server.h"
+#include "esp_http_client.h"
+
 
 #include "esp_log.h"
 #include "led_strip.h"
 #include "sdkconfig.h"
+#include "esp_netif_ip_addr.h"
+
+#include "esp_ota_ops.h"
 
 static const char *TAG = "example";
 
@@ -94,8 +99,157 @@ static void configure_led(void)
     led_strip_clear(led_strip);
 }
 
+#define MAX_BIN_SIZE (2 * 1024 * 1024)  // 2MB max firmware
+static uint8_t *downloaded_bin = NULL;
+static size_t downloaded_bin_len = 0;
 
-esp_err_t firmware_get_handler(httpd_req_t *req) {
+
+
+/*
+esp_err_t download_firmware_from_url(const char *url)
+{
+    esp_http_client_config_t config = {
+        .url = url,
+        .timeout_ms = 10000,
+    };
+
+    esp_http_client_handle_t client = esp_http_client_init(&config);
+    if (esp_http_client_open(client, 0) != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to open HTTP connection");
+        return ESP_FAIL;
+    }
+
+    int total_len = esp_http_client_fetch_headers(client);
+    if (total_len <= 0 || total_len > MAX_BIN_SIZE) {
+        ESP_LOGE(TAG, "Invalid content length: %d", total_len);
+        esp_http_client_cleanup(client);
+        return ESP_FAIL;
+    }
+
+    downloaded_bin = malloc(total_len);
+    if (!downloaded_bin) {
+        ESP_LOGE(TAG, "Failed to allocate memory for firmware");
+        esp_http_client_cleanup(client);
+        return ESP_FAIL;
+    }
+
+    int read_len = esp_http_client_read_response(client, (char *)downloaded_bin, total_len);
+    if (read_len != total_len) {
+        ESP_LOGE(TAG, "Incomplete read: %d/%d", read_len, total_len);
+        free(downloaded_bin);
+        downloaded_bin = NULL;
+        esp_http_client_cleanup(client);
+        return ESP_FAIL;
+    }
+
+    downloaded_bin_len = read_len;
+    esp_http_client_cleanup(client);
+    ESP_LOGI(TAG, "Firmware downloaded successfully (%d bytes)", downloaded_bin_len);
+    return ESP_OK;
+}
+*/
+
+esp_err_t download_firmware_from_url(const char *url)
+{
+    esp_http_client_config_t config = {
+        .url = url,
+        .timeout_ms = 10000,
+    };
+
+    /*esp_http_client_handle_t client = esp_http_client_init(&config);
+    if (esp_http_client_open(client, 0) != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to open HTTP connection");
+        return ESP_FAIL;
+    }
+    */
+
+    esp_http_client_handle_t client = esp_http_client_init(&config);
+    if (esp_http_client_open(client, 0) != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to open HTTP connection");
+        return ESP_FAIL;
+    }   
+
+    esp_http_client_fetch_headers(client);
+
+    const esp_partition_t *ota_partition = esp_ota_get_next_update_partition(NULL);
+    if (!ota_partition) {
+        ESP_LOGE(TAG, "OTA partition not found");
+        esp_http_client_cleanup(client);
+        return ESP_FAIL;
+    }
+
+    esp_ota_handle_t ota_handle;
+    if (esp_ota_begin(ota_partition, OTA_SIZE_UNKNOWN, &ota_handle) != ESP_OK) {
+        ESP_LOGE(TAG, "esp_ota_begin failed");
+        esp_http_client_cleanup(client);
+        return ESP_FAIL;
+    }
+
+    /*char buffer[1024];
+    int data_read;
+    while ((data_read = esp_http_client_read(client, buffer, sizeof(buffer))) > 0) {
+        if (esp_ota_write(ota_handle, buffer, data_read) != ESP_OK) {
+            ESP_LOGE(TAG, "esp_ota_write failed");
+            esp_http_client_cleanup(client);
+            esp_ota_end(ota_handle);
+            return ESP_FAIL;
+        }
+    }
+    */
+
+        char buffer[1024];
+    int data_read;
+    int total_bytes = 0;  
+
+    while ((data_read = esp_http_client_read(client, buffer, sizeof(buffer))) > 0) {
+        total_bytes += data_read;  // add bytes
+        printf("data_read: %d\n", data_read);
+        static bool first_chunk_logged = false;
+        if (!first_chunk_logged && data_read >= 4) {
+            ESP_LOGI(TAG, "First bytes: 0x%02X 0x%02X 0x%02X 0x%02X",
+                    buffer[0], buffer[1], buffer[2], buffer[3]);
+        first_chunk_logged = true;
+    }
+
+        if (esp_ota_write(ota_handle, buffer, data_read) != ESP_OK) {
+            ESP_LOGE(TAG, "esp_ota_write failed");
+            esp_http_client_cleanup(client);
+            esp_ota_end(ota_handle);
+            return ESP_FAIL;
+        }
+    }
+
+    ESP_LOGI(TAG, "Total OTA bytes read: %d", total_bytes);
+    //ESP_LOGI(TAG, "Total OTA data read: %d", data_read);  
+
+
+    if (data_read < 0) {
+        ESP_LOGE(TAG, "esp_http_client_read error");
+        esp_http_client_cleanup(client);
+        esp_ota_end(ota_handle);
+        return ESP_FAIL;
+    }
+
+    if (esp_ota_end(ota_handle) != ESP_OK) {
+        ESP_LOGE(TAG, "esp_ota_end failed");
+        esp_http_client_cleanup(client);
+        return ESP_FAIL;
+    }
+
+    if (esp_ota_set_boot_partition(ota_partition) != ESP_OK) {
+        ESP_LOGE(TAG, "esp_ota_set_boot_partition failed");
+        esp_http_client_cleanup(client);
+        return ESP_FAIL;
+    }
+
+    ESP_LOGI(TAG, "OTA update successful. Rebooting...");
+    esp_http_client_cleanup(client);
+    esp_restart();  
+    return ESP_OK;  
+}
+
+
+/*esp_err_t firmware_get_handler(httpd_req_t *req) {
         extern const uint8_t binary_start[] asm("_binary_firmware_bin_start");
         extern const uint8_t binary_end[]   asm("_binary_firmware_bin_end");
         const size_t binary_size = binary_end - binary_start;
@@ -104,6 +258,17 @@ esp_err_t firmware_get_handler(httpd_req_t *req) {
         httpd_resp_send(req, (const char *)binary_start, binary_size);
         return ESP_OK;
     }
+*/
+
+esp_err_t firmware_get_handler(httpd_req_t *req) {
+            if (!downloaded_bin || downloaded_bin_len == 0) {
+                httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Firmware not ready");
+                return ESP_FAIL;
+            }
+            httpd_resp_set_type(req, "application/octet-stream");
+            httpd_resp_send(req, (const char *)downloaded_bin, downloaded_bin_len);
+            return ESP_OK;
+}
 
 void start_file_server(void) {
     httpd_handle_t server = NULL;
@@ -136,14 +301,7 @@ typedef enum {
 
 static const uint8_t PAYLOAD_DATA_ALLINFO[] = {
     0x5E, 0xB3, 0x1C, 0x7A, 0xD9, 0x04,
-    0x92, 0x6F, 0x38, 0xAC, 0x0D, 0xE1,
-    0x53, 0xCF, 0x70, 0x18, 0xA6, 0x25,
-    0xF4, 0x3B, 0x81, 0xD0, 0x6A, 0x19,
-    0xBE, 0x42, 0x8D, 0x09, 0x77, 0xEC,
-    0x34, 0x9B, 0x0A, 0xC1, 0x5D, 0x68,
-    0xAF, 0x12, 0x93, 0xFE, 0x60, 0x37,
-    0xD2, 0x84, 0x1A, 0xB7, 0x4F, 0x00,
-    0xEE, 0x29
+    0x92, 0x6F
 
 };
 
@@ -212,6 +370,25 @@ static void send_payload(payload_type_t type)
     Sx1261_InitParam_WUR(sx_parameters, SYNCWORD);
     Sx1261_InitFonction_WUR(sx_parameters);
     Sx1261_Send_WuR_Signal(sx_parameters, payload, length);
+}
+
+void print_sta_ip_address(void)
+{
+    esp_netif_ip_info_t ip_info;
+    esp_netif_t *netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+
+    if (netif == NULL) {
+        ESP_LOGE("IP_CHECK", "Failed to get netif handle for STA.");
+        return;
+    }
+
+    if (esp_netif_get_ip_info(netif, &ip_info) == ESP_OK) {
+        ESP_LOGI("IP_CHECK", "ESP32 IP Address: " IPSTR, IP2STR(&ip_info.ip));
+        ESP_LOGI("IP_CHECK", "Netmask: " IPSTR, IP2STR(&ip_info.netmask));
+        ESP_LOGI("IP_CHECK", "Gateway: " IPSTR, IP2STR(&ip_info.gw));
+    } else {
+        ESP_LOGE("IP_CHECK", "Failed to get IP info");
+    }
 }
 
 static void receive_varlen_payload(void)
@@ -473,7 +650,7 @@ void app_main(void)
     ESP_ERROR_CHECK( err );
 
 
-    //Wi-Fi SoftAP Initialization
+    /*//Wi-Fi SoftAP Initialization
     // Initialize TCP/IP stack
     ESP_ERROR_CHECK(esp_netif_init());
     // Create default event loop
@@ -484,43 +661,75 @@ void app_main(void)
     // Load default Wi-Fi configuration
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+    */
 
-    // Configure SoftAP parameters
-    wifi_config_t wifi_config = {
-        .ap = {
-            .ssid = "ESP32_HOTSPOT",
-            .ssid_len = strlen("ESP32_HOTSPOT"),
-            .password = "12345678",
-            .max_connection = 4,
-            .authmode = WIFI_AUTH_WPA_WPA2_PSK
+    ESP_ERROR_CHECK(esp_netif_init());
+    ESP_ERROR_CHECK(esp_event_loop_create_default());
+
+    esp_netif_create_default_wifi_sta();
+
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+
+    wifi_config_t wifi_config_sta = {
+        .sta = {
+            .ssid = "KAIXUANA",   //input Wi-Fi SSID
+            .password = "test1234",  //input Wi-Fi password
         },
     };
-    if (strlen("12345678") == 0) {
-        wifi_config.ap.authmode = WIFI_AUTH_OPEN;
-    }
-
-    // Set Wi-Fi mode to Access Point (SoftAP)
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
-    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config));
+    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config_sta));
     ESP_ERROR_CHECK(esp_wifi_start());
+    ESP_ERROR_CHECK(esp_wifi_connect());
 
-    ESP_LOGI(TAG, "Wi-Fi SoftAP started. SSID:%s password:%s", "ESP32_HOTSPOT", "12345678");
+    /*ESP_LOGI(TAG, "Connecting to Wi-Fi...");
+    for (int i = 0; i < 10; ++i) {
+        wifi_ap_record_t ap_info;
+        if (esp_wifi_sta_get_ap_info(&ap_info) == ESP_OK) {
+            ESP_LOGI(TAG, "Wi-Fi connected.");
+            break;
+        }
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+    */
 
-    esp_netif_ip_info_t ip_info;
-    esp_netif_t *ap_netif = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
-    if (ap_netif == NULL) {
-        ESP_LOGE(TAG, "Failed to get AP netif");
+    vTaskDelay(pdMS_TO_TICKS(2000));  
+    print_sta_ip_address();  //Print ESP ip
+
+
+    const char *firmware_url = "http://192.168.43.150:8000/firmware.bin";
+    if (download_firmware_from_url(firmware_url) != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to download firmware. OTA service not available.");
     } else {
-        esp_netif_get_ip_info(ap_netif, &ip_info);
-        ESP_LOGI(TAG, "SoftAP IP Address: " IPSTR, IP2STR(&ip_info.ip));
-        ESP_LOGI(TAG, "SoftAP Gateway:   " IPSTR, IP2STR(&ip_info.gw));
-        ESP_LOGI(TAG, "SoftAP Netmask:   " IPSTR, IP2STR(&ip_info.netmask));
+        ESP_LOGI(TAG, "Firmware ready for OTA");
+
+
+    ESP_ERROR_CHECK(esp_wifi_stop());
+
+    esp_netif_create_default_wifi_ap();
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
+
+    wifi_config_t wifi_config_ap = {
+            .ap = {
+                .ssid = "ESP32_HOTSPOT",
+                .ssid_len = strlen("ESP32_HOTSPOT"),
+                .password = "12345678",
+                .max_connection = 4,
+                .authmode = WIFI_AUTH_WPA_WPA2_PSK
+            },
+        };
+    if (strlen("12345678") == 0) {
+        wifi_config_ap.ap.authmode = WIFI_AUTH_OPEN;
     }
 
-    //Start HTTP Server
+    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config_ap));
+    ESP_ERROR_CHECK(esp_wifi_start());
+    ESP_LOGI(TAG, "SoftAP started. SSID:%s password:%s", "ESP32_HOTSPOT", "12345678");
+
     start_file_server();
-    //ESP_LOGI(TAG, "HTTP server for firmware.bin is now running.");
-    ESP_LOGI("OTA_SERVER", "HTTP server started. You can access http://192.168.4.1/firmware.bin");
+
+    }
 
 
     //sx1261_init();
