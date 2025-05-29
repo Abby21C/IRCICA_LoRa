@@ -105,49 +105,6 @@ static size_t downloaded_bin_len = 0;
 
 
 
-/*
-esp_err_t download_firmware_from_url(const char *url)
-{
-    esp_http_client_config_t config = {
-        .url = url,
-        .timeout_ms = 10000,
-    };
-
-    esp_http_client_handle_t client = esp_http_client_init(&config);
-    if (esp_http_client_open(client, 0) != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to open HTTP connection");
-        return ESP_FAIL;
-    }
-
-    int total_len = esp_http_client_fetch_headers(client);
-    if (total_len <= 0 || total_len > MAX_BIN_SIZE) {
-        ESP_LOGE(TAG, "Invalid content length: %d", total_len);
-        esp_http_client_cleanup(client);
-        return ESP_FAIL;
-    }
-
-    downloaded_bin = malloc(total_len);
-    if (!downloaded_bin) {
-        ESP_LOGE(TAG, "Failed to allocate memory for firmware");
-        esp_http_client_cleanup(client);
-        return ESP_FAIL;
-    }
-
-    int read_len = esp_http_client_read_response(client, (char *)downloaded_bin, total_len);
-    if (read_len != total_len) {
-        ESP_LOGE(TAG, "Incomplete read: %d/%d", read_len, total_len);
-        free(downloaded_bin);
-        downloaded_bin = NULL;
-        esp_http_client_cleanup(client);
-        return ESP_FAIL;
-    }
-
-    downloaded_bin_len = read_len;
-    esp_http_client_cleanup(client);
-    ESP_LOGI(TAG, "Firmware downloaded successfully (%d bytes)", downloaded_bin_len);
-    return ESP_OK;
-}
-*/
 
 esp_err_t download_firmware_from_url(const char *url)
 {
@@ -156,12 +113,6 @@ esp_err_t download_firmware_from_url(const char *url)
         .timeout_ms = 10000,
     };
 
-    /*esp_http_client_handle_t client = esp_http_client_init(&config);
-    if (esp_http_client_open(client, 0) != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to open HTTP connection");
-        return ESP_FAIL;
-    }
-    */
 
     esp_http_client_handle_t client = esp_http_client_init(&config);
     if (esp_http_client_open(client, 0) != ESP_OK) {
@@ -185,19 +136,9 @@ esp_err_t download_firmware_from_url(const char *url)
         return ESP_FAIL;
     }
 
-    /*char buffer[1024];
-    int data_read;
-    while ((data_read = esp_http_client_read(client, buffer, sizeof(buffer))) > 0) {
-        if (esp_ota_write(ota_handle, buffer, data_read) != ESP_OK) {
-            ESP_LOGE(TAG, "esp_ota_write failed");
-            esp_http_client_cleanup(client);
-            esp_ota_end(ota_handle);
-            return ESP_FAIL;
-        }
-    }
-    */
+    
 
-        char buffer[1024];
+    char buffer[1024];
     int data_read;
     int total_bytes = 0;  
 
@@ -244,30 +185,54 @@ esp_err_t download_firmware_from_url(const char *url)
 
     ESP_LOGI(TAG, "OTA update successful. Rebooting...");
     esp_http_client_cleanup(client);
-    esp_restart();  
+    //esp_restart();  // Uncomment this line to reboot after OTA update
     return ESP_OK;  
 }
 
 
-/*esp_err_t firmware_get_handler(httpd_req_t *req) {
-        extern const uint8_t binary_start[] asm("_binary_firmware_bin_start");
-        extern const uint8_t binary_end[]   asm("_binary_firmware_bin_end");
-        const size_t binary_size = binary_end - binary_start;
-
-        httpd_resp_set_type(req, "application/octet-stream");
-        httpd_resp_send(req, (const char *)binary_start, binary_size);
-        return ESP_OK;
-    }
-*/
 
 esp_err_t firmware_get_handler(httpd_req_t *req) {
-            if (!downloaded_bin || downloaded_bin_len == 0) {
-                httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Firmware not ready");
-                return ESP_FAIL;
-            }
-            httpd_resp_set_type(req, "application/octet-stream");
-            httpd_resp_send(req, (const char *)downloaded_bin, downloaded_bin_len);
-            return ESP_OK;
+    const esp_partition_t *partition = esp_ota_get_next_update_partition(NULL);
+    if (!partition) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "OTA partition not found");
+        return ESP_FAIL;
+    }
+
+    httpd_resp_set_type(req, "application/octet-stream");
+
+    const size_t chunk_size = 1024;
+    uint8_t *buffer = malloc(chunk_size);
+    if (!buffer) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Buffer alloc failed");
+        return ESP_FAIL;
+    }
+
+    size_t offset = 0;
+    size_t remaining = partition->size;
+    esp_err_t err;
+
+    while (remaining > 0) {
+        size_t to_read = remaining > chunk_size ? chunk_size : remaining;
+        err = esp_partition_read(partition, offset, buffer, to_read);
+        if (err != ESP_OK) {
+            free(buffer);
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Read failed");
+            return ESP_FAIL;
+        }
+
+        err = httpd_resp_send_chunk(req, (const char *)buffer, to_read);
+        if (err != ESP_OK) {
+            free(buffer);
+            return err;
+        }
+
+        offset += to_read;
+        remaining -= to_read;
+    }
+
+    httpd_resp_send_chunk(req, NULL, 0);
+    free(buffer);
+    return ESP_OK;
 }
 
 void start_file_server(void) {
@@ -292,11 +257,6 @@ typedef enum {
     PAYLOAD_TYPE_LED_GREEN  = 3
 } payload_type_t;
 
-/*static const uint8_t PAYLOAD_DATA_ALLINFO[] = {
-    0x06, 0x8B, 0x3F, 0x42, 0x36, 0x4F,
-    0x00, 0x5A, 0x8B, 0x21, 0x11, 0x2C
-};
-*/
 
 
 static const uint8_t PAYLOAD_DATA_ALLINFO[] = {
@@ -449,14 +409,7 @@ void run_TX_WUR(void *pvParameters)
     
     while (1)
     {
-        /*Sx1261_InitParam_WUR(sx_parameters, SYNCWORD);
-        Sx1261_InitFonction_WUR(sx_parameters);
-        ESP_LOGI(TAG, "Sx1261_SendSignal_WUR");
-        //Sx1261_Send_WuR_Signal(sx_parameters,data, 0); 
-        Sx1261_Send_WuR_Signal(sx_parameters, payload, 1); 
-        */
-
-
+        
         //send_payload();
         send_payload(PAYLOAD_TYPE_ALLINFO);
 
@@ -507,29 +460,7 @@ void run_RX_WUR(void *pvParameters)
         
         receive_varlen_payload();
 
-        /*
-        if (received_payload[0] == 0x01) {          //have to put in the fuction receive_varlen_payload if needed
-        ESP_LOGI(TAG, "Receive payload, LED ON");
-        s_led_state = 1;
-        blink_led();
-        vTaskDelay(pdMS_TO_TICKS(500));
-        s_led_state = 0;
-        blink_led();
-        }
-
-        uint8_t color_code = 0;
-        if (received_payload[0] == 0x01) {
-            color_code = 1; // WHITE
-        } else if (received_payload[0] == 0x02) {
-            color_code = 2; // RED
-        } else if (received_payload[0] == 0x03) {
-            color_code = 3; // GREEN
-        }
-
-        show_color_led(color_code);
-        vTaskDelay(pdMS_TO_TICKS(500));
-        show_color_led(0); //clean the led
-        */
+        
 
 
             ESP_LOGI(TAG, "Sx1261_WurMode");
@@ -650,18 +581,6 @@ void app_main(void)
     ESP_ERROR_CHECK( err );
 
 
-    /*//Wi-Fi SoftAP Initialization
-    // Initialize TCP/IP stack
-    ESP_ERROR_CHECK(esp_netif_init());
-    // Create default event loop
-    ESP_ERROR_CHECK(esp_event_loop_create_default());
-    // Create default Wi-Fi AP interface
-    esp_netif_create_default_wifi_ap();
-
-    // Load default Wi-Fi configuration
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
-    */
 
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
@@ -683,16 +602,6 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_wifi_start());
     ESP_ERROR_CHECK(esp_wifi_connect());
 
-    /*ESP_LOGI(TAG, "Connecting to Wi-Fi...");
-    for (int i = 0; i < 10; ++i) {
-        wifi_ap_record_t ap_info;
-        if (esp_wifi_sta_get_ap_info(&ap_info) == ESP_OK) {
-            ESP_LOGI(TAG, "Wi-Fi connected.");
-            break;
-        }
-        vTaskDelay(pdMS_TO_TICKS(1000));
-    }
-    */
 
     vTaskDelay(pdMS_TO_TICKS(2000));  
     print_sta_ip_address();  //Print ESP ip
