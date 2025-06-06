@@ -188,7 +188,7 @@ esp_err_t download_firmware_from_url(const char *url)
     //esp_restart();  // Uncomment this line to reboot after OTA update
     return ESP_OK;  
 }
-
+ 
 
 
 esp_err_t firmware_get_handler(httpd_req_t *req) {
@@ -594,8 +594,8 @@ void app_main(void)
 
     wifi_config_t wifi_config_sta = {
         .sta = {
-            .ssid = "KAIXUANA",   //input Wi-Fi SSID
-            .password = "test1234",  //input Wi-Fi password
+            .ssid = "POCOX6",   //input Wi-Fi SSID
+            .password = "22334455",  //input Wi-Fi password
         },
     };
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config_sta));
@@ -607,7 +607,7 @@ void app_main(void)
     print_sta_ip_address();  //Print ESP ip
 
 
-    const char *firmware_url = "http://192.168.43.150:8000/firmware.bin";
+    const char *firmware_url = "http://192.168.253.200:8000/firmware.bin";
     if (download_firmware_from_url(firmware_url) != ESP_OK) {
         ESP_LOGE(TAG, "Failed to download firmware. OTA service not available.");
     } else {
