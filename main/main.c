@@ -628,13 +628,13 @@ void app_main(void)
                 .authmode = WIFI_AUTH_WPA_WPA2_PSK
             },
         };
-    if (strlen("12345678") == 0) {
+    if (wifi_config_ap.ap.password[0] == '\0') {
         wifi_config_ap.ap.authmode = WIFI_AUTH_OPEN;
     }
 
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config_ap));
     ESP_ERROR_CHECK(esp_wifi_start());
-    ESP_LOGI(TAG, "SoftAP started. SSID:%s password:%s", "ESP32_HOTSPOT", "12345678");
+    ESP_LOGI(TAG, "SoftAP started. SSID:%s password:%s", wifi_config_ap.ap.ssid, wifi_config_ap.ap.password);
 
     start_file_server();
 
