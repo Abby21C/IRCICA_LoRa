@@ -607,7 +607,7 @@ void app_main(void)
     print_sta_ip_address();  //Print ESP ip
 
 
-    const char *firmware_url = "http://192.168.253.200:8000/firmware.bin";
+    const char *firmware_url = "http://192.168.105.200:8000/firmware.bin";
     if (download_firmware_from_url(firmware_url) != ESP_OK) {
         ESP_LOGE(TAG, "Failed to download firmware. OTA service not available.");
     } else {
