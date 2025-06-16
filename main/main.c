@@ -192,6 +192,24 @@ esp_err_t download_firmware_from_url(const char *url)
 
 
 esp_err_t firmware_get_handler(httpd_req_t *req) {
+    
+    //new start
+    /*struct sockaddr_in *client_addr = (struct sockaddr_in *)req->sess_ctx;
+    if (client_addr) {
+        char ip_str[INET_ADDRSTRLEN];
+        inet_ntop(AF_INET, &(client_addr->sin_addr), ip_str, sizeof(ip_str));
+        ESP_LOGI(TAG, "Client connected: %s", ip_str);
+    } else {
+        ESP_LOGW(TAG, "Could not retrieve client IP.");
+    }*/
+    struct sockaddr_in6 peer_addr;
+    socklen_t peer_addr_len = sizeof(peer_addr);
+    getpeername(httpd_req_to_sockfd(req), (struct sockaddr *)&peer_addr, &peer_addr_len);
+    char ip_str[INET6_ADDRSTRLEN];
+    inet_ntop(AF_INET, &((struct sockaddr_in *)&peer_addr)->sin_addr, ip_str, sizeof(ip_str));
+    ESP_LOGI(TAG, "Serving to client: %s", ip_str);
+    //new end
+    
     const esp_partition_t *partition = esp_ota_get_next_update_partition(NULL);
     if (!partition) {
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "OTA partition not found");
@@ -207,9 +225,13 @@ esp_err_t firmware_get_handler(httpd_req_t *req) {
         return ESP_FAIL;
     }
 
+
     size_t offset = 0;
     size_t remaining = partition->size;
     esp_err_t err;
+
+    size_t total_sent = 0;  //new line
+    
 
     while (remaining > 0) {
         size_t to_read = remaining > chunk_size ? chunk_size : remaining;
@@ -228,6 +250,11 @@ esp_err_t firmware_get_handler(httpd_req_t *req) {
 
         offset += to_read;
         remaining -= to_read;
+        total_sent += to_read; //new line
+        //new till 1024
+        if ((total_sent % (64 * 1024)) == 0) {
+            ESP_LOGI(TAG, "Sent %d KB to client", total_sent / 1024);
+        }
     }
 
     httpd_resp_send_chunk(req, NULL, 0);
@@ -411,7 +438,8 @@ void run_TX_WUR(void *pvParameters)
     {
         
         //send_payload();
-        send_payload(PAYLOAD_TYPE_ALLINFO);
+        //send_payload(PAYLOAD_TYPE_ALLINFO);
+        send_payload(PAYLOAD_TYPE_LED_GREEN);
 
         /*static const uint8_t PAYLOAD_LED_RED[] = { PAYLOAD_TYPE_LED_RED };
         send_payload(PAYLOAD_TYPE_LED_RED);
@@ -607,7 +635,7 @@ void app_main(void)
     print_sta_ip_address();  //Print ESP ip
 
 
-    const char *firmware_url = "http://192.168.105.200:8000/firmware.bin";
+    const char *firmware_url = "http://192.168.63.200:8000/firmware.bin";
     if (download_firmware_from_url(firmware_url) != ESP_OK) {
         ESP_LOGE(TAG, "Failed to download firmware. OTA service not available.");
     } else {
