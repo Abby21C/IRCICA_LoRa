@@ -31,6 +31,22 @@
 
 static const char *TAG = "example";
 
+#define CONFIG_EXAMPLE_MAX_ASYNC_REQUESTS 3  // Set the maximum number of concurrent asynchronous requests
+#define ASYNC_WORKER_STACK_SIZE 8192
+
+
+static TaskHandle_t worker_handles[CONFIG_EXAMPLE_MAX_ASYNC_REQUESTS];  // Array of task handles for asynchronous workers
+static QueueHandle_t async_req_queue;  // Queue for asynchronous task requests
+static SemaphoreHandle_t worker_ready_count;  // Semaphore to track the number of available workers
+
+typedef esp_err_t (*httpd_req_handler_t)(httpd_req_t *req);  // Function pointer type for HTTP request handlers
+
+typedef struct {
+    httpd_req_t* req;                       // Pointer to the HTTP request
+    httpd_req_handler_t handler;           // Pointer to the request handler function
+} httpd_async_req_t;  // Custom structure for asynchronous HTTP requests
+
+
 /* Use project configuration menu (idf.py menuconfig) to choose the GPIO to blink,
    or you can edit the following line and set a number here.
 */
@@ -113,7 +129,6 @@ esp_err_t download_firmware_from_url(const char *url)
         .timeout_ms = 10000,
     };
 
-
     esp_http_client_handle_t client = esp_http_client_init(&config);
     if (esp_http_client_open(client, 0) != ESP_OK) {
         ESP_LOGE(TAG, "Failed to open HTTP connection");
@@ -129,6 +144,9 @@ esp_err_t download_firmware_from_url(const char *url)
         return ESP_FAIL;
     }
 
+    //ESP_LOGI(TAG, "Writing to partition subtype %d at offset 0x%08x, label: %s",
+    //        ota_partition->subtype, ota_partition->address, ota_partition->label);
+
     esp_ota_handle_t ota_handle;
     if (esp_ota_begin(ota_partition, OTA_SIZE_UNKNOWN, &ota_handle) != ESP_OK) {
         ESP_LOGE(TAG, "esp_ota_begin failed");
@@ -136,21 +154,19 @@ esp_err_t download_firmware_from_url(const char *url)
         return ESP_FAIL;
     }
 
-    
-
     char buffer[1024];
     int data_read;
     int total_bytes = 0;  
 
     while ((data_read = esp_http_client_read(client, buffer, sizeof(buffer))) > 0) {
-        total_bytes += data_read;  // add bytes
+        total_bytes += data_read;
         printf("data_read: %d\n", data_read);
         static bool first_chunk_logged = false;
         if (!first_chunk_logged && data_read >= 4) {
             ESP_LOGI(TAG, "First bytes: 0x%02X 0x%02X 0x%02X 0x%02X",
-                    buffer[0], buffer[1], buffer[2], buffer[3]);
-        first_chunk_logged = true;
-    }
+                     buffer[0], buffer[1], buffer[2], buffer[3]);
+            first_chunk_logged = true;
+        }
 
         if (esp_ota_write(ota_handle, buffer, data_read) != ESP_OK) {
             ESP_LOGE(TAG, "esp_ota_write failed");
@@ -161,8 +177,6 @@ esp_err_t download_firmware_from_url(const char *url)
     }
 
     ESP_LOGI(TAG, "Total OTA bytes read: %d", total_bytes);
-    //ESP_LOGI(TAG, "Total OTA data read: %d", data_read);  
-
 
     if (data_read < 0) {
         ESP_LOGE(TAG, "esp_http_client_read error");
@@ -183,33 +197,71 @@ esp_err_t download_firmware_from_url(const char *url)
         return ESP_FAIL;
     }
 
-    ESP_LOGI(TAG, "OTA update successful. Rebooting...");
+    ESP_LOGI(TAG, "OTA update successful. Reboot skipped to stay in SoftAP mode as OTA server.");
     esp_http_client_cleanup(client);
-    //esp_restart();  // Uncomment this line to reboot after OTA update
-    return ESP_OK;  
+    //esp_restart();
+    return ESP_OK;
 }
- 
+
+
+static bool is_on_async_worker_thread(void)
+{
+    TaskHandle_t handle = xTaskGetCurrentTaskHandle();
+    for (int i = 0; i < CONFIG_EXAMPLE_MAX_ASYNC_REQUESTS; i++) {
+        if (worker_handles[i] == handle) {
+            return true;
+        }
+    }
+    return false;
+}
+
+
+static esp_err_t submit_async_req(httpd_req_t *req, httpd_req_handler_t handler)
+{
+    httpd_req_t* copy = NULL;
+    esp_err_t err = httpd_req_async_handler_begin(req, &copy);
+    if (err != ESP_OK) return err;
+
+    httpd_async_req_t async_req = {
+        .req = copy,
+        .handler = handler,
+    };
+
+    if (xSemaphoreTake(worker_ready_count, 0) == false) {
+        ESP_LOGE(TAG, "No workers available");
+        httpd_req_async_handler_complete(copy);
+        return ESP_FAIL;
+    }
+
+    if (xQueueSend(async_req_queue, &async_req, pdMS_TO_TICKS(100)) == false) {
+        ESP_LOGE(TAG, "Worker queue full");
+        httpd_req_async_handler_complete(copy);
+        return ESP_FAIL;
+    }
+
+    return ESP_OK;
+}
 
 
 esp_err_t firmware_get_handler(httpd_req_t *req) {
-    
-    //new start
-    /*struct sockaddr_in *client_addr = (struct sockaddr_in *)req->sess_ctx;
-    if (client_addr) {
-        char ip_str[INET_ADDRSTRLEN];
-        inet_ntop(AF_INET, &(client_addr->sin_addr), ip_str, sizeof(ip_str));
-        ESP_LOGI(TAG, "Client connected: %s", ip_str);
-    } else {
-        ESP_LOGW(TAG, "Could not retrieve client IP.");
-    }*/
+    //If not currently on an async worker thread, attempt to schedule this handler asynchronously
+    if (!is_on_async_worker_thread()) {
+        if (submit_async_req(req, firmware_get_handler) == ESP_OK) {
+            return ESP_OK;  // Successfully handed off to a worker; main thread is released
+        } else {
+            httpd_resp_send_err(req, 503, "Server busy");
+            return ESP_FAIL;
+        }
+    }
+
+    //On an async worker thread, actually handle the OTA request
     struct sockaddr_in6 peer_addr;
     socklen_t peer_addr_len = sizeof(peer_addr);
     getpeername(httpd_req_to_sockfd(req), (struct sockaddr *)&peer_addr, &peer_addr_len);
     char ip_str[INET6_ADDRSTRLEN];
     inet_ntop(AF_INET, &((struct sockaddr_in *)&peer_addr)->sin_addr, ip_str, sizeof(ip_str));
     ESP_LOGI(TAG, "Serving to client: %s", ip_str);
-    //new end
-    
+
     const esp_partition_t *partition = esp_ota_get_next_update_partition(NULL);
     if (!partition) {
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "OTA partition not found");
@@ -225,13 +277,10 @@ esp_err_t firmware_get_handler(httpd_req_t *req) {
         return ESP_FAIL;
     }
 
-
     size_t offset = 0;
     size_t remaining = partition->size;
     esp_err_t err;
-
-    size_t total_sent = 0;  //new line
-    
+    size_t total_sent = 0;
 
     while (remaining > 0) {
         size_t to_read = remaining > chunk_size ? chunk_size : remaining;
@@ -250,8 +299,7 @@ esp_err_t firmware_get_handler(httpd_req_t *req) {
 
         offset += to_read;
         remaining -= to_read;
-        total_sent += to_read; //new line
-        //new till 1024
+        total_sent += to_read;
         if ((total_sent % (64 * 1024)) == 0) {
             ESP_LOGI(TAG, "Sent %d KB to client", total_sent / 1024);
         }
@@ -261,6 +309,49 @@ esp_err_t firmware_get_handler(httpd_req_t *req) {
     free(buffer);
     return ESP_OK;
 }
+
+
+static void async_req_worker_task(void *p)
+{
+    ESP_LOGI(TAG, "Async worker started");
+    while (true) {
+        xSemaphoreGive(worker_ready_count);  // Indicate that this worker is idle
+        httpd_async_req_t async_req;
+        if (xQueueReceive(async_req_queue, &async_req, portMAX_DELAY)) {
+            ESP_LOGI(TAG, "Invoking handler for: %s", async_req.req->uri);
+            async_req.handler(async_req.req);  // Actually handle the request
+            if (httpd_req_async_handler_complete(async_req.req) != ESP_OK) {
+                ESP_LOGE(TAG, "Async req completion failed");
+            }
+        }
+    }
+    vTaskDelete(NULL);
+}
+
+static void start_async_req_workers(void)
+{
+    worker_ready_count = xSemaphoreCreateCounting(CONFIG_EXAMPLE_MAX_ASYNC_REQUESTS, 0);
+    if (worker_ready_count == NULL) {
+        ESP_LOGE(TAG, "Failed to create counting semaphore");
+        return;
+    }
+
+    async_req_queue = xQueueCreate(1, sizeof(httpd_async_req_t));
+    if (async_req_queue == NULL) {
+        ESP_LOGE(TAG, "Failed to create async request queue");
+        vSemaphoreDelete(worker_ready_count);
+        return;
+    }
+
+    for (int i = 0; i < CONFIG_EXAMPLE_MAX_ASYNC_REQUESTS; i++) {
+        if (!xTaskCreate(async_req_worker_task, "async_worker",
+                         8192, NULL, 5, &worker_handles[i])) {
+            ESP_LOGE(TAG, "Failed to start async worker %d", i);
+        }
+    }
+}
+
+
 
 void start_file_server(void) {
     httpd_handle_t server = NULL;
@@ -630,12 +721,10 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_wifi_start());
     ESP_ERROR_CHECK(esp_wifi_connect());
 
-
-    vTaskDelay(pdMS_TO_TICKS(2000));  
+    vTaskDelay(pdMS_TO_TICKS(2000));
     print_sta_ip_address();  //Print ESP ip
 
-
-    const char *firmware_url = "http://192.168.63.200:8000/firmware.bin";
+    const char *firmware_url = "http://192.168.192.200:8000/firmware.bin";
     if (download_firmware_from_url(firmware_url) != ESP_OK) {
         ESP_LOGE(TAG, "Failed to download firmware. OTA service not available.");
     } else {
@@ -664,6 +753,7 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_wifi_start());
     ESP_LOGI(TAG, "SoftAP started. SSID:%s password:%s", wifi_config_ap.ap.ssid, wifi_config_ap.ap.password);
 
+    start_async_req_workers();
     start_file_server();
 
     }
