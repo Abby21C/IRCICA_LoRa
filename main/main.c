@@ -732,6 +732,11 @@ void app_main(void)
         ESP_LOGE(TAG, "Failed to download firmware. OTA service not available.");
     } else {
         ESP_LOGI(TAG, "Firmware ready for OTA");
+    
+
+    const char *firmware_url = "http://192.168.83.200:8000/firmware.bin";
+    ESP_LOGI(TAG, "Starting OTA update using new ota_update module...");
+    start_ota_update(firmware_url);
 
 
     ESP_ERROR_CHECK(esp_wifi_stop());
