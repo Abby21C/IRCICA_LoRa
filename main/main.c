@@ -30,6 +30,7 @@
 #include "esp_ota_ops.h"
 
 #include "ota_update.h"
+#include "http_ota_server.h"
 
 static const char *TAG = "example";
 
@@ -124,7 +125,7 @@ static size_t downloaded_bin_len = 0;
 
 
 
-esp_err_t download_firmware_from_url(const char *url)
+/*esp_err_t download_firmware_from_url(const char *url)
 {
     esp_http_client_config_t config = {
         .url = url,
@@ -204,6 +205,7 @@ esp_err_t download_firmware_from_url(const char *url)
     //esp_restart();
     return ESP_OK;
 }
+    */
 
 
 static bool is_on_async_worker_thread(void)
@@ -245,7 +247,7 @@ static esp_err_t submit_async_req(httpd_req_t *req, httpd_req_handler_t handler)
 }
 
 
-esp_err_t firmware_get_handler(httpd_req_t *req) {
+/*esp_err_t firmware_get_handler(httpd_req_t *req) {
     //If not currently on an async worker thread, attempt to schedule this handler asynchronously
     if (!is_on_async_worker_thread()) {
         if (submit_async_req(req, firmware_get_handler) == ESP_OK) {
@@ -312,7 +314,7 @@ esp_err_t firmware_get_handler(httpd_req_t *req) {
     free(buffer);
     return ESP_OK;
 }
-
+*/
 
 static void async_req_worker_task(void *p)
 {
@@ -356,7 +358,7 @@ static void start_async_req_workers(void)
 
 
 
-void start_file_server(void) {
+/*void start_file_server(void) {
     httpd_handle_t server = NULL;
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     httpd_start(&server, &config);
@@ -370,6 +372,7 @@ void start_file_server(void) {
 
     httpd_register_uri_handler(server, &firmware_uri);
 }
+*/
 
 typedef enum {
     PAYLOAD_TYPE_ALLINFO = 0,
@@ -734,10 +737,10 @@ void app_main(void)
         ESP_LOGI(TAG, "Firmware ready for OTA");
     
 
-    const char *firmware_url = "http://192.168.83.200:8000/firmware.bin";
+    /* Start the OTA update 
     ESP_LOGI(TAG, "Starting OTA update using new ota_update module...");
     start_ota_update(firmware_url);
-
+    */
 
     ESP_ERROR_CHECK(esp_wifi_stop());
 
@@ -762,7 +765,7 @@ void app_main(void)
     ESP_LOGI(TAG, "SoftAP started. SSID:%s password:%s", wifi_config_ap.ap.ssid, wifi_config_ap.ap.password);
 
     start_async_req_workers();
-    start_file_server();
+    start_ota_file_server();
 
     }
 
