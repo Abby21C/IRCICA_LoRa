@@ -31,6 +31,8 @@
 
 #include "ota_update.h"
 #include "http_ota_server.h"
+#include "payload_manager.h"
+
 
 static const char *TAG = "example";
 
@@ -125,89 +127,6 @@ static size_t downloaded_bin_len = 0;
 
 
 
-/*esp_err_t download_firmware_from_url(const char *url)
-{
-    esp_http_client_config_t config = {
-        .url = url,
-        .timeout_ms = 10000,
-    };
-
-    esp_http_client_handle_t client = esp_http_client_init(&config);
-    if (esp_http_client_open(client, 0) != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to open HTTP connection");
-        return ESP_FAIL;
-    }   
-
-    esp_http_client_fetch_headers(client);
-
-    const esp_partition_t *ota_partition = esp_ota_get_next_update_partition(NULL);
-    if (!ota_partition) {
-        ESP_LOGE(TAG, "OTA partition not found");
-        esp_http_client_cleanup(client);
-        return ESP_FAIL;
-    }
-
-    //ESP_LOGI(TAG, "Writing to partition subtype %d at offset 0x%08x, label: %s",
-    //        ota_partition->subtype, ota_partition->address, ota_partition->label);
-
-    esp_ota_handle_t ota_handle;
-    if (esp_ota_begin(ota_partition, OTA_SIZE_UNKNOWN, &ota_handle) != ESP_OK) {
-        ESP_LOGE(TAG, "esp_ota_begin failed");
-        esp_http_client_cleanup(client);
-        return ESP_FAIL;
-    }
-
-    char buffer[1024];
-    int data_read;
-    int total_bytes = 0;  
-
-    while ((data_read = esp_http_client_read(client, buffer, sizeof(buffer))) > 0) {
-        total_bytes += data_read;
-        printf("data_read: %d\n", data_read);
-        static bool first_chunk_logged = false;
-        if (!first_chunk_logged && data_read >= 4) {
-            ESP_LOGI(TAG, "First bytes: 0x%02X 0x%02X 0x%02X 0x%02X",
-                     buffer[0], buffer[1], buffer[2], buffer[3]);
-            first_chunk_logged = true;
-        }
-
-        if (esp_ota_write(ota_handle, buffer, data_read) != ESP_OK) {
-            ESP_LOGE(TAG, "esp_ota_write failed");
-            esp_http_client_cleanup(client);
-            esp_ota_end(ota_handle);
-            return ESP_FAIL;
-        }
-    }
-
-    ESP_LOGI(TAG, "Total OTA bytes read: %d", total_bytes);
-
-    if (data_read < 0) {
-        ESP_LOGE(TAG, "esp_http_client_read error");
-        esp_http_client_cleanup(client);
-        esp_ota_end(ota_handle);
-        return ESP_FAIL;
-    }
-
-    if (esp_ota_end(ota_handle) != ESP_OK) {
-        ESP_LOGE(TAG, "esp_ota_end failed");
-        esp_http_client_cleanup(client);
-        return ESP_FAIL;
-    }
-
-    if (esp_ota_set_boot_partition(ota_partition) != ESP_OK) {
-        ESP_LOGE(TAG, "esp_ota_set_boot_partition failed");
-        esp_http_client_cleanup(client);
-        return ESP_FAIL;
-    }
-
-    ESP_LOGI(TAG, "OTA update successful. Reboot skipped to stay in SoftAP mode as OTA server.");
-    esp_http_client_cleanup(client);
-    //esp_restart();
-    return ESP_OK;
-}
-    */
-
-
 static bool is_on_async_worker_thread(void)
 {
     TaskHandle_t handle = xTaskGetCurrentTaskHandle();
@@ -247,74 +166,6 @@ static esp_err_t submit_async_req(httpd_req_t *req, httpd_req_handler_t handler)
 }
 
 
-/*esp_err_t firmware_get_handler(httpd_req_t *req) {
-    //If not currently on an async worker thread, attempt to schedule this handler asynchronously
-    if (!is_on_async_worker_thread()) {
-        if (submit_async_req(req, firmware_get_handler) == ESP_OK) {
-            return ESP_OK;  // Successfully handed off to a worker; main thread is released
-        } else {
-            httpd_resp_send_err(req, 503, "Server busy");
-            return ESP_FAIL;
-        }
-    }
-
-    //On an async worker thread, actually handle the OTA request
-    struct sockaddr_in6 peer_addr;
-    socklen_t peer_addr_len = sizeof(peer_addr);
-    getpeername(httpd_req_to_sockfd(req), (struct sockaddr *)&peer_addr, &peer_addr_len);
-    char ip_str[INET6_ADDRSTRLEN];
-    inet_ntop(AF_INET, &((struct sockaddr_in *)&peer_addr)->sin_addr, ip_str, sizeof(ip_str));
-    ESP_LOGI(TAG, "Serving to client: %s", ip_str);
-
-    const esp_partition_t *partition = esp_ota_get_next_update_partition(NULL);
-    if (!partition) {
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "OTA partition not found");
-        return ESP_FAIL;
-    }
-
-    httpd_resp_set_type(req, "application/octet-stream");
-
-    const size_t chunk_size = 1024;
-    uint8_t *buffer = malloc(chunk_size);
-    if (!buffer) {
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Buffer alloc failed");
-        return ESP_FAIL;
-    }
-
-    size_t offset = 0;
-    size_t remaining = partition->size;
-    esp_err_t err;
-    size_t total_sent = 0;
-
-
-    while (remaining > 0) {
-        size_t to_read = remaining > chunk_size ? chunk_size : remaining;
-        err = esp_partition_read(partition, offset, buffer, to_read);
-        if (err != ESP_OK) {
-            free(buffer);
-            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Read failed");
-            return ESP_FAIL;
-        }
-
-        err = httpd_resp_send_chunk(req, (const char *)buffer, to_read);
-        if (err != ESP_OK) {
-            free(buffer);
-            return err;
-        }
-
-        offset += to_read;
-        remaining -= to_read;
-        total_sent += to_read;
-        if ((total_sent % (64 * 1024)) == 0) {
-            ESP_LOGI(TAG, "Sent %d KB to client", total_sent / 1024);
-        }
-    }
-
-    httpd_resp_send_chunk(req, NULL, 0);
-    free(buffer);
-    return ESP_OK;
-}
-*/
 
 static void async_req_worker_task(void *p)
 {
@@ -358,40 +209,6 @@ static void start_async_req_workers(void)
 
 
 
-/*void start_file_server(void) {
-    httpd_handle_t server = NULL;
-    httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    httpd_start(&server, &config);
-
-    httpd_uri_t firmware_uri = {
-        .uri      = "/firmware.bin",
-        .method   = HTTP_GET,
-        .handler  = firmware_get_handler,
-        .user_ctx = NULL
-    };
-
-    httpd_register_uri_handler(server, &firmware_uri);
-}
-*/
-
-typedef enum {
-    PAYLOAD_TYPE_ALLINFO = 0,
-    PAYLOAD_TYPE_LED_WHITE  = 1,
-    PAYLOAD_TYPE_LED_RED    = 2,
-    PAYLOAD_TYPE_LED_GREEN  = 3
-} payload_type_t;
-
-
-
-static const uint8_t PAYLOAD_DATA_ALLINFO[] = {
-    0x5E, 0xB3, 0x1C, 0x7A, 0xD9, 0x04,
-    0x92, 0x6F
-
-};
-
-static const uint8_t PAYLOAD_LED_WHITE[] = { PAYLOAD_TYPE_LED_WHITE };
-static const uint8_t PAYLOAD_LED_RED[]   = { PAYLOAD_TYPE_LED_RED };
-static const uint8_t PAYLOAD_LED_GREEN[] = { PAYLOAD_TYPE_LED_GREEN };
 
 RTC_DATA_ATTR int number_of_wake_up = -1;
 
@@ -423,39 +240,6 @@ context_t *sx_parameters = &sx_wur_param;
 
 
 
-static void send_payload(payload_type_t type)
-{
-    const uint8_t *payload = NULL;
-    size_t length = 0;
-
-    switch (type) {
-        case PAYLOAD_TYPE_ALLINFO:
-            payload = PAYLOAD_DATA_ALLINFO;
-            length = sizeof(PAYLOAD_DATA_ALLINFO);
-            break;
-        case PAYLOAD_TYPE_LED_WHITE:
-            payload = PAYLOAD_LED_WHITE;
-            length = sizeof(PAYLOAD_LED_WHITE);
-            break;
-        case PAYLOAD_TYPE_LED_RED:
-            payload = PAYLOAD_LED_RED;
-            length = sizeof(PAYLOAD_LED_RED);
-            break;
-        case PAYLOAD_TYPE_LED_GREEN:
-            payload = PAYLOAD_LED_GREEN;
-            length = sizeof(PAYLOAD_LED_GREEN);
-            break;
-        default:
-            ESP_LOGW(TAG, "Unknown payload type.");
-            return;
-    }
-
-    ESP_LOGI(TAG, "Sending payload type %d with %d bytes", type, (int)length);
-    Sx1261_InitParam_WUR(sx_parameters, SYNCWORD);
-    Sx1261_InitFonction_WUR(sx_parameters);
-    Sx1261_Send_WuR_Signal(sx_parameters, payload, length);
-}
-
 void print_sta_ip_address(void)
 {
     esp_netif_ip_info_t ip_info;
@@ -475,51 +259,6 @@ void print_sta_ip_address(void)
     }
 }
 
-static void receive_varlen_payload(void)
-{
-    sx126x_rx_buffer_status_t rx_status;
-    sx126x_get_rx_buffer_status(sx_parameters, &rx_status);
-
-    uint8_t received_payload[256] = {0};
-    sx126x_read_buffer(sx_parameters, rx_status.buffer_start_pointer,
-                       received_payload, rx_status.pld_len_in_bytes);
-
-    ESP_LOGI(TAG, "Received payload (%d bytes):", rx_status.pld_len_in_bytes);
-    for (int i = 0; i < rx_status.pld_len_in_bytes; i++) {
-        ESP_LOGI(TAG, "Byte[%d] = 0x%02X", i, received_payload[i]);
-    }
-
-    payload_type_t received_type = (payload_type_t)received_payload[0];
-
-    if (received_type == PAYLOAD_TYPE_LED_WHITE) {
-        ESP_LOGI(TAG, "Receive payload, LED ON");
-        s_led_state = 1;
-        blink_led();
-        vTaskDelay(pdMS_TO_TICKS(500));
-        s_led_state = 0;
-        blink_led();
-    }
-
-    uint8_t color_code = 0;
-    switch (received_type) {
-        case PAYLOAD_TYPE_LED_WHITE:
-            color_code = 1;
-            break;
-        case PAYLOAD_TYPE_LED_RED:
-            color_code = 2;
-            break;
-        case PAYLOAD_TYPE_LED_GREEN:
-            color_code = 3;
-            break;
-        default:
-            break;
-    }
-    
-    show_color_led(color_code);
-    vTaskDelay(pdMS_TO_TICKS(500));
-    show_color_led(0);
-
-}
 
 
 /**
@@ -534,9 +273,8 @@ void run_TX_WUR(void *pvParameters)
     while (1)
     {
         
-        //send_payload();
-        //send_payload(PAYLOAD_TYPE_ALLINFO);
-        send_payload(PAYLOAD_TYPE_LED_GREEN);
+        
+        send_payload(PAYLOAD_TYPE_ALLINFO);
 
         /*static const uint8_t PAYLOAD_LED_RED[] = { PAYLOAD_TYPE_LED_RED };
         send_payload(PAYLOAD_TYPE_LED_RED);
@@ -583,11 +321,9 @@ void run_RX_WUR(void *pvParameters)
 
         
         
-        receive_varlen_payload();
+        receive_payload();
 
         
-
-
             ESP_LOGI(TAG, "Sx1261_WurMode");
             sx126x_clear_irq_status( sx_parameters, &sx126x_irq_mask );
             sx126x_reset(sx_parameters);
@@ -719,8 +455,8 @@ void app_main(void)
 
     wifi_config_t wifi_config_sta = {
         .sta = {
-            .ssid = "POCOX6",   //input Wi-Fi SSID
-            .password = "22334455",  //input Wi-Fi password
+            .ssid = "chrizzzzz",   //input Wi-Fi SSID
+            .password = "ponnu555",  //input Wi-Fi password
         },
     };
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config_sta));
@@ -730,7 +466,7 @@ void app_main(void)
     vTaskDelay(pdMS_TO_TICKS(2000));
     print_sta_ip_address();  //Print ESP ip
 
-    const char *firmware_url = "http://192.168.83.200:8000/firmware.bin";
+    const char *firmware_url = "http://192.168.80.200:8000/firmware.bin";
     if (download_firmware_from_url(firmware_url) != ESP_OK) {
         ESP_LOGE(TAG, "Failed to download firmware. OTA service not available.");
     } else {
@@ -784,7 +520,7 @@ void app_main(void)
     #ifdef RX_WUR
         ESP_LOGW(TAG, "WOKE UP DEEP SLEEP");
         sx1261_init();
-        receive_varlen_payload();
+        receive_payload();
 
         spi_device_interface_config_t spiConfig;
         memset(&spiConfig, 0, sizeof(spiConfig));

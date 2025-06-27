@@ -6,5 +6,6 @@ set(component_srcs
 "wur/src/sx1261_WuR.c")
 
 idf_component_register(SRCS "${component_srcs}"
-                       PRIV_REQUIRES driver
+                       #PRIV_REQUIRES driver
+                       REQUIRES driver
                        INCLUDE_DIRS "." "wur/inc")
