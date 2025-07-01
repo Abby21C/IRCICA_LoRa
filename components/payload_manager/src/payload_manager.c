@@ -3,10 +3,9 @@
 #include "sx126x.h"
 #include "esp_log.h"
 #include "led_strip.h"
+#include "led_status.h"
 
 static const char* TAG = "PayloadMgr";
-
-static payload_type_t last_received_type = PAYLOAD_TYPE_ALLINFO;
 
 extern context_t* sx_parameters;
 extern uint8_t SYNCWORD[];
@@ -68,10 +67,6 @@ void receive_payload(void) {
     }
 
     payload_type_t received_type = (payload_type_t)received_payload[0];
-    last_received_type = received_type;
+    led_status_handle_payload(received_type);
     // Users can further process the received_type, e.g., control the LED based on type
-}
-
-payload_type_t get_last_received_payload_type(void) {
-    return last_received_type;
 }

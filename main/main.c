@@ -31,8 +31,8 @@
 #include "ota_update.h"
 #include "http_ota_server.h"
 #include "payload_manager.h"
-//#include "led_status.h"
 #include "async_web_server.h"
+#include "led_status.h"
 
 
 
@@ -42,17 +42,6 @@ static const char *TAG = "example";
 #define ASYNC_WORKER_STACK_SIZE 8192
 
 
-/*static TaskHandle_t worker_handles[CONFIG_EXAMPLE_MAX_ASYNC_REQUESTS];  // Array of task handles for asynchronous workers
-static QueueHandle_t async_req_queue;  // Queue for asynchronous task requests
-static SemaphoreHandle_t worker_ready_count;  // Semaphore to track the number of available workers
-
-//typedef esp_err_t (*httpd_req_handler_t)(httpd_req_t *req);  // Function pointer type for HTTP request handlers
-
-typedef struct {
-    httpd_req_t* req;                       // Pointer to the HTTP request
-    httpd_req_handler_t handler;           // Pointer to the request handler function
-} httpd_async_req_t;  // Custom structure for asynchronous HTTP requests
-*/
 
 /* Use project configuration menu (idf.py menuconfig) to choose the GPIO to blink,
    or you can edit the following line and set a number here.
@@ -67,65 +56,11 @@ typedef struct {
 
 uint8_t SYNCWORD[] = {0xae, 0xae, 0xae, 0xae, 0xae, 0xae, 0xae, 0xae};
 
-static uint8_t s_led_state = 0;
 
-static led_strip_handle_t led_strip;
-
-static void blink_led(void)
-{
-    /* If the addressable LED is enabled */
-    if (s_led_state) {
-        /* Set the LED pixel using RGB from 0 (0%) to 255 (100%) for each color */
-        led_strip_set_pixel(led_strip, 0, 16, 16, 16);
-        /* Refresh the strip to send data */
-        led_strip_refresh(led_strip);
-    } else {
-        /* Set all LED off to clear all pixels */
-        led_strip_clear(led_strip);
-    }
-}
-
-static void show_color_led(uint8_t color_code)
-{
-    switch (color_code) {
-        case 1: // WHITE
-            led_strip_set_pixel(led_strip, 0, 16, 16, 16);
-            break;
-        case 2: // RED
-            led_strip_set_pixel(led_strip, 0, 48, 0, 0);
-            break;
-        case 3: // GREEN
-            led_strip_set_pixel(led_strip, 0, 0, 48, 0);
-            break;
-        default:
-            led_strip_clear(led_strip);
-            return;
-    }
-    led_strip_refresh(led_strip);
-}
-
-static void configure_led(void)
-{
-    ESP_LOGI(TAG, "Example configured to blink addressable LED!");
-    /* LED strip initialization with the GPIO and pixels number*/
-    led_strip_config_t strip_config = {
-        .strip_gpio_num = BLINK_GPIO,
-        .max_leds = 1, // at least one LED on board
-    };
-
-    led_strip_spi_config_t spi_config = {
-        .spi_bus = SPI3_HOST,
-        .flags.with_dma = true,
-    };
-    ESP_ERROR_CHECK(led_strip_new_spi_device(&strip_config, &spi_config, &led_strip));
-    /* Set all LED off to clear all pixels */
-    led_strip_clear(led_strip);
-}
 
 #define MAX_BIN_SIZE (2 * 1024 * 1024)  // 2MB max firmware
 static uint8_t *downloaded_bin = NULL;
 static size_t downloaded_bin_len = 0;
-
 
 
 
@@ -229,13 +164,13 @@ void run_RX_WUR(void *pvParameters)
 			ESP_LOGI(TAG, "reveil, nb_reveils : %d ;  temps écoulé : %llu s ",
 			nb_reveils, (current_time - init_time)/1000000);
 
-            s_led_state = !s_led_state;
-            blink_led();
+            
+            led_status_toggle();
             vTaskDelay(pdMS_TO_TICKS(1000));
-            s_led_state = !s_led_state;
-            blink_led();
+            led_status_toggle();
+
 			
-        	vTaskDelay(pdMS_TO_TICKS(1000));
+        	//vTaskDelay(pdMS_TO_TICKS(1000));
 			//on repasse en sommeil
 
         
@@ -323,12 +258,12 @@ void parallel_wur_detection(){
 void app_main(void)
 {
     rtc_gpio_hold_dis(CONFIG_NSS_GPIO);
-    configure_led();
-    s_led_state = !s_led_state;
-    blink_led();
+    
+    led_status_init(BLINK_GPIO);
+    led_status_toggle();
     vTaskDelay(pdMS_TO_TICKS(1000));
-    s_led_state = !s_led_state;
-    blink_led();
+    led_status_toggle();
+
 
 	//initialize radio modem with context
 	sx126x_hal_context_t* context;
