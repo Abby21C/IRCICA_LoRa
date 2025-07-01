@@ -1,4 +1,3 @@
-
 #include <stdio.h>
 #include <inttypes.h>
 #include <string.h>
@@ -32,6 +31,9 @@
 #include "ota_update.h"
 #include "http_ota_server.h"
 #include "payload_manager.h"
+//#include "led_status.h"
+#include "async_web_server.h"
+
 
 
 static const char *TAG = "example";
@@ -40,17 +42,17 @@ static const char *TAG = "example";
 #define ASYNC_WORKER_STACK_SIZE 8192
 
 
-static TaskHandle_t worker_handles[CONFIG_EXAMPLE_MAX_ASYNC_REQUESTS];  // Array of task handles for asynchronous workers
+/*static TaskHandle_t worker_handles[CONFIG_EXAMPLE_MAX_ASYNC_REQUESTS];  // Array of task handles for asynchronous workers
 static QueueHandle_t async_req_queue;  // Queue for asynchronous task requests
 static SemaphoreHandle_t worker_ready_count;  // Semaphore to track the number of available workers
 
-typedef esp_err_t (*httpd_req_handler_t)(httpd_req_t *req);  // Function pointer type for HTTP request handlers
+//typedef esp_err_t (*httpd_req_handler_t)(httpd_req_t *req);  // Function pointer type for HTTP request handlers
 
 typedef struct {
     httpd_req_t* req;                       // Pointer to the HTTP request
     httpd_req_handler_t handler;           // Pointer to the request handler function
 } httpd_async_req_t;  // Custom structure for asynchronous HTTP requests
-
+*/
 
 /* Use project configuration menu (idf.py menuconfig) to choose the GPIO to blink,
    or you can edit the following line and set a number here.
@@ -127,7 +129,7 @@ static size_t downloaded_bin_len = 0;
 
 
 
-static bool is_on_async_worker_thread(void)
+/*static bool is_on_async_worker_thread(void)
 {
     TaskHandle_t handle = xTaskGetCurrentTaskHandle();
     for (int i = 0; i < CONFIG_EXAMPLE_MAX_ASYNC_REQUESTS; i++) {
@@ -137,9 +139,9 @@ static bool is_on_async_worker_thread(void)
     }
     return false;
 }
+*/
 
-
-static esp_err_t submit_async_req(httpd_req_t *req, httpd_req_handler_t handler)
+/*static esp_err_t submit_async_req(httpd_req_t *req, httpd_req_handler_t handler)
 {
     httpd_req_t* copy = NULL;
     esp_err_t err = httpd_req_async_handler_begin(req, &copy);
@@ -164,10 +166,10 @@ static esp_err_t submit_async_req(httpd_req_t *req, httpd_req_handler_t handler)
 
     return ESP_OK;
 }
+*/
 
 
-
-static void async_req_worker_task(void *p)
+/*static void async_req_worker_task(void *p)
 {
     ESP_LOGI(TAG, "Async worker started");
     while (true) {
@@ -183,8 +185,9 @@ static void async_req_worker_task(void *p)
     }
     vTaskDelete(NULL);
 }
+*/
 
-static void start_async_req_workers(void)
+/*static void start_async_req_workers(void)
 {
     worker_ready_count = xSemaphoreCreateCounting(CONFIG_EXAMPLE_MAX_ASYNC_REQUESTS, 0);
     if (worker_ready_count == NULL) {
@@ -206,7 +209,7 @@ static void start_async_req_workers(void)
         }
     }
 }
-
+*/
 
 
 
@@ -274,7 +277,7 @@ void run_TX_WUR(void *pvParameters)
     {
         
         
-        send_payload(PAYLOAD_TYPE_ALLINFO);
+        send_payload(PAYLOAD_TYPE_LED_GREEN);
 
         /*static const uint8_t PAYLOAD_LED_RED[] = { PAYLOAD_TYPE_LED_RED };
         send_payload(PAYLOAD_TYPE_LED_RED);
@@ -455,8 +458,8 @@ void app_main(void)
 
     wifi_config_t wifi_config_sta = {
         .sta = {
-            .ssid = "chrizzzzz",   //input Wi-Fi SSID
-            .password = "ponnu555",  //input Wi-Fi password
+            .ssid = "POCOX6",   //input Wi-Fi SSID
+            .password = "22334455",  //input Wi-Fi password
         },
     };
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config_sta));
@@ -466,7 +469,7 @@ void app_main(void)
     vTaskDelay(pdMS_TO_TICKS(2000));
     print_sta_ip_address();  //Print ESP ip
 
-    const char *firmware_url = "http://192.168.80.200:8000/firmware.bin";
+    const char *firmware_url = "http://192.168.83.200:8000/firmware.bin";
     if (download_firmware_from_url(firmware_url) != ESP_OK) {
         ESP_LOGE(TAG, "Failed to download firmware. OTA service not available.");
     } else {
@@ -500,7 +503,8 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_wifi_start());
     ESP_LOGI(TAG, "SoftAP started. SSID:%s password:%s", wifi_config_ap.ap.ssid, wifi_config_ap.ap.password);
 
-    start_async_req_workers();
+    //start_async_req_workers();
+    async_web_server_init(CONFIG_EXAMPLE_MAX_ASYNC_REQUESTS);
     start_ota_file_server();
 
     }

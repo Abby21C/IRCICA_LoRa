@@ -6,6 +6,8 @@
 
 static const char* TAG = "PayloadMgr";
 
+static payload_type_t last_received_type = PAYLOAD_TYPE_ALLINFO;
+
 extern context_t* sx_parameters;
 extern uint8_t SYNCWORD[];
 
@@ -66,5 +68,10 @@ void receive_payload(void) {
     }
 
     payload_type_t received_type = (payload_type_t)received_payload[0];
+    last_received_type = received_type;
     // Users can further process the received_type, e.g., control the LED based on type
+}
+
+payload_type_t get_last_received_payload_type(void) {
+    return last_received_type;
 }

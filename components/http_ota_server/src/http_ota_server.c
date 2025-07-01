@@ -9,6 +9,8 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
+#include "async_web_server.h"
+
 static const char *TAG = "http_ota_server";
 
 /**
@@ -64,6 +66,11 @@ static esp_err_t firmware_get_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
+static esp_err_t firmware_async_entry(httpd_req_t *req)
+{
+    return async_web_server_submit(req, firmware_get_handler);
+}
+
 /**
  * @brief start the OTA file server
  */
@@ -78,14 +85,15 @@ esp_err_t start_ota_file_server(void)
     }
 
     httpd_uri_t firmware_uri = {
-        .uri      = "/firmware.bin",
-        .method   = HTTP_GET,
-        .handler  = firmware_get_handler,
-        .user_ctx = NULL
-    };
+    .uri      = "/firmware.bin",
+    .method   = HTTP_GET,
+    .handler  = firmware_async_entry,
+    .user_ctx = NULL
+};
 
     return httpd_register_uri_handler(server, &firmware_uri);
 }
+
 
 /**
  * @brief download firmware from a given URL and perform OTA update

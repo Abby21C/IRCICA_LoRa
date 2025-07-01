@@ -23,6 +23,8 @@ void send_payload(payload_type_t type);
 // Receive and process a payload
 void receive_payload(void);
 
+payload_type_t get_last_received_payload_type(void);
+
 #ifdef __cplusplus
 }
 #endif
