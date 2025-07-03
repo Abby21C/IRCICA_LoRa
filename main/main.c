@@ -33,6 +33,7 @@
 #include "payload_manager.h"
 #include "async_web_server.h"
 #include "led_status.h"
+#include "wur_transmission.h"
 
 
 
@@ -115,96 +116,6 @@ void print_sta_ip_address(void)
 
 
 
-/**
- * @brief simple task that send a WuB each 3 secondes
- * 
- */
-void run_TX_WUR(void *pvParameters)
-{
-    uint64_t exec_time = 0;
-    uint8_t compteur = 0;
-    
-    while (1)
-    {
-        
-        
-        send_payload(PAYLOAD_TYPE_LED_GREEN);
-
-        /*static const uint8_t PAYLOAD_LED_RED[] = { PAYLOAD_TYPE_LED_RED };
-        send_payload(PAYLOAD_TYPE_LED_RED);
-        */
-
-        compteur++;
-        ESP_LOGI(TAG, "number of signal sended: %d", compteur);
-        vTaskDelay(pdMS_TO_TICKS(10000));
-	}
-}
-
-/**
- * @brief simple task that print the number of time that the iot woke up when he wakes up
- * 
- */
-void run_RX_WUR(void *pvParameters)
-{
-    int nb_reveils = 0;
-    uint64_t init_time = esp_timer_get_time();; //heure au début à l'initialisation
-    uint64_t current_time = 0; //heure courante
-    sx126x_irq_mask_t sx126x_irq_mask;
-    ESP_LOGW(TAG, "DIO1 Level %d", gpio_get_level(CONFIG_DIO1_GPIO));
-    while (1)
-    {
-        //we check irq status (note : it has to be coded with interrupt esp)
-        sx126x_get_irq_status(sx_parameters,&sx126x_irq_mask);
-        if (sx126x_irq_mask & SX126X_IRQ_SYNC_WORD_VALID)
-        {
-            nb_reveils ++;
-			current_time = esp_timer_get_time();
-            ESP_LOGW(TAG, "irq : %d", sx126x_irq_mask);
-            ESP_LOGW(TAG, "DIO1 Level %d", gpio_get_level(CONFIG_DIO1_GPIO));
-			ESP_LOGI(TAG, "reveil, nb_reveils : %d ;  temps écoulé : %llu s ",
-			nb_reveils, (current_time - init_time)/1000000);
-
-            
-            led_status_toggle();
-            vTaskDelay(pdMS_TO_TICKS(1000));
-            led_status_toggle();
-
-			
-        	//vTaskDelay(pdMS_TO_TICKS(1000));
-			//on repasse en sommeil
-
-        
-        
-        receive_payload();
-
-        
-            ESP_LOGI(TAG, "Sx1261_WurMode");
-            sx126x_clear_irq_status( sx_parameters, &sx126x_irq_mask );
-            sx126x_reset(sx_parameters);
-            ESP_LOGI(TAG, "Sx1261_InitParamRX");
-            Sx1261_InitParam_WUR(sx_parameters, SYNCWORD);
-            ESP_LOGI(TAG, "Sx1261_InitFonction");
-            Sx1261_InitFonction_WUR(sx_parameters);
-
-            
-			ESP_LOGI(TAG, "Sx1261_WurMode");
-            sx126x_clear_irq_status( sx_parameters, &sx126x_irq_mask );
-            sx126x_reset(sx_parameters);
-            ESP_LOGI(TAG, "Sx1261_InitParamRX");
-            Sx1261_InitParam_WUR(sx_parameters, SYNCWORD);
-            ESP_LOGI(TAG, "Sx1261_InitFonction");
-            Sx1261_InitFonction_WUR(sx_parameters);
-            ESP_LOGI(TAG, "Sx1261_WurMode");
-            Sx1261_WurMode(sx_parameters, 999, 1);
-            //ESP_LOGI(TAG, "Sx1261_WurMode");
-            ESP_LOGW(TAG, "DIO1 Level after reset %d", gpio_get_level(CONFIG_DIO1_GPIO));
-            //Sx1261_WurMode(sx_parameters, 999, 1);
-
-       
-        }
-        vTaskDelay(pdMS_TO_TICKS(1000));
-    }
-}
 
 void task_interruption( void * parameter )
 {   //TODO - activate the interruption in esp32, and dont do the for loop
@@ -365,60 +276,31 @@ void app_main(void)
     /*  PARTIE WUR*/
     #ifdef TX_WUR
         sx1261_init();
-        sx126x_reset(sx_parameters);
-        ESP_LOGI(TAG, "initparam");
-        Sx1261_InitParam_WUR(sx_parameters, SYNCWORD);
-        ESP_LOGI(TAG, "initfonction");
-        Sx1261_InitFonction_WUR(sx_parameters);
-	    xTaskCreate(&run_TX_WUR, "run_TX_WUR", 1024*4, NULL, 5, NULL);
+        
+        wur_start_tx(sx_parameters);
+
     #endif
     #ifdef RX_WUR
-        ESP_LOGW(TAG, "WOKE UP DEEP SLEEP");
-        sx1261_init();
-        receive_payload();
+    ESP_LOGW(TAG, "WOKE UP DEEP SLEEP");
+    sx1261_init(); 
 
-        spi_device_interface_config_t spiConfig;
-        memset(&spiConfig, 0, sizeof(spiConfig));
-        spiConfig.mode = 0;
-        spiConfig.clock_speed_hz = 50000;
-        spiConfig.command_bits = 8;
-        spiConfig.address_bits = 8;
-        spiConfig.spics_io_num = 4;
-        spiConfig.queue_size = 1;
-        spiConfig.cs_ena_posttrans = 2;
-        spi_device_handle_t spiHandle_accel;
-        esp_err_t ret = spi_bus_add_device(SPI2_HOST, &spiConfig, &spiHandle_accel);
-        number_of_wake_up++;
+    wur_rx_once(sx_parameters);  // Start RX once after wake-up in low-power mode
 
-        ESP_LOGW(TAG, "DIO1 Level wake up %d", gpio_get_level(CONFIG_DIO1_GPIO));
-        
-        sx126x_reset(sx_parameters);
-        ESP_LOGI(TAG, "Sx1261_InitParamRX");
-        Sx1261_InitParam_WUR(sx_parameters, SYNCWORD);
-        ESP_LOGI(TAG, "Sx1261_InitFonction");
-        Sx1261_InitFonction_WUR(sx_parameters);
-        ESP_LOGI(TAG, "Sx1261_WurMode");
-        Sx1261_WurMode(sx_parameters, 999, 1);
-        ESP_LOGI("INTERRUPTION", "\033[0mWuR interrupt enable");
-        //vTaskDelay(pdMS_TO_TICKS(1000));
+    number_of_wake_up++;
+    ESP_LOGW(TAG, "DIO1 Level wake up %d", gpio_get_level(CONFIG_DIO1_GPIO));
 
-        //xTaskCreate(&run_RX_WUR, "run_RX_WUR", 1024*4, NULL, 5, NULL);
-        
-        uint64_t ext_wakeup_pins_mask = (1ULL << CONFIG_DIO1_GPIO);
-        
-        
-        rtc_gpio_set_level(CONFIG_NSS_GPIO,1);
-        rtc_gpio_pulldown_en(CONFIG_DIO1_GPIO);
-        rtc_gpio_hold_en(CONFIG_NSS_GPIO);
-        //vTaskDelay(pdMS_TO_TICKS(1000));
     
-        esp_sleep_enable_ext1_wakeup(ext_wakeup_pins_mask, ESP_EXT1_WAKEUP_ANY_HIGH);
-        ESP_LOGW(TAG, "GOING TO DEEP SLEEP");
-        esp_deep_sleep_start();
-        
+    // Configure DIO1 as the wake-up pin
+    uint64_t ext_wakeup_pins_mask = (1ULL << CONFIG_DIO1_GPIO);
+    rtc_gpio_set_level(CONFIG_NSS_GPIO, 1);
+    rtc_gpio_pulldown_en(CONFIG_DIO1_GPIO);
+    rtc_gpio_hold_en(CONFIG_NSS_GPIO);
 
+    esp_sleep_enable_ext1_wakeup(ext_wakeup_pins_mask, ESP_EXT1_WAKEUP_ANY_HIGH);
+    ESP_LOGW(TAG, "GOING TO DEEP SLEEP");
+    esp_deep_sleep_start();
+#endif
 
-    #endif
 
 }
 
