@@ -13,7 +13,7 @@
         "IDF_TARGET": "esp32s3"
     },
     "idf.flashType": "UART",
-    "idf.portWin": "COM9",
+    "idf.portWin": "COM3",
     "files.associations": {
         "esp_http_client.h": "c"
     }

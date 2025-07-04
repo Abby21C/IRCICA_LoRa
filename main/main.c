@@ -34,7 +34,7 @@
 #include "async_web_server.h"
 #include "led_status.h"
 #include "wur_transmission.h"
-
+#include "utils.h"
 
 
 static const char *TAG = "example";
@@ -95,76 +95,6 @@ context_t *sx_parameters = &sx_wur_param;
 
 
 
-void print_sta_ip_address(void)
-{
-    esp_netif_ip_info_t ip_info;
-    esp_netif_t *netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
-
-    if (netif == NULL) {
-        ESP_LOGE("IP_CHECK", "Failed to get netif handle for STA.");
-        return;
-    }
-
-    if (esp_netif_get_ip_info(netif, &ip_info) == ESP_OK) {
-        ESP_LOGI("IP_CHECK", "ESP32 IP Address: " IPSTR, IP2STR(&ip_info.ip));
-        ESP_LOGI("IP_CHECK", "Netmask: " IPSTR, IP2STR(&ip_info.netmask));
-        ESP_LOGI("IP_CHECK", "Gateway: " IPSTR, IP2STR(&ip_info.gw));
-    } else {
-        ESP_LOGE("IP_CHECK", "Failed to get IP info");
-    }
-}
-
-
-
-
-void task_interruption( void * parameter )
-{   //TODO - activate the interruption in esp32, and dont do the for loop
-    sx126x_irq_mask_t sx126x_irq_mask;
-    ESP_LOGW(TAG, "DIO1 Level %d", gpio_get_level(CONFIG_DIO1_GPIO));
-
-    while (true)
-    {
-        //we check irq status (note : it has to be coded with interrupt esp)
-        sx126x_get_irq_status(sx_parameters,&sx126x_irq_mask);
-        if (sx126x_irq_mask & SX126X_IRQ_SYNC_WORD_VALID)
-        {
-            ESP_LOGW(TAG, "irq : %d", sx126x_irq_mask);
-            ESP_LOGW(TAG, "DIO1 Level %d", gpio_get_level(CONFIG_DIO1_GPIO));
-            ESP_LOGE(TAG, "WOKE UP IN TASK")   ;
-			
-        	vTaskDelay(pdMS_TO_TICKS(1000));
-			//on repasse en sommeil
-			ESP_LOGI(TAG, "Sx1261_WurMode");
-            sx126x_clear_irq_status( sx_parameters, &sx126x_irq_mask );
-            sx126x_reset(sx_parameters);
-            ESP_LOGI(TAG, "Sx1261_InitParamRX");
-            Sx1261_InitParam_WUR(sx_parameters, SYNCWORD);
-            ESP_LOGI(TAG, "Sx1261_InitFonction");
-            Sx1261_InitFonction_WUR(sx_parameters);
-            ESP_LOGI(TAG, "Sx1261_WurMode");
-            Sx1261_WurMode(sx_parameters, 999, 1);
-            //ESP_LOGI(TAG, "Sx1261_WurMode");
-            ESP_LOGW(TAG, "DIO1 Level after reset %d", gpio_get_level(CONFIG_DIO1_GPIO));
-            //Sx1261_WurMode(sx_parameters, 999, 1);
-        }
-        vTaskDelay(pdMS_TO_TICKS(1000));
-    }
-}
-
-void parallel_wur_detection(){
-    gpio_config_t io_conf = {};
-    rtc_gpio_hold_dis((gpio_num_t)CONFIG_NSS_GPIO);
-    ESP_LOGI("INTERRUPTION", "\033[0mConfiguring SX1261");
-    sx126x_reset(sx_parameters);
-    ESP_LOGI("INTERRUPTION", "Sx1261_InitParamRX");
-    Sx1261_InitParam_WUR(sx_parameters, SYNCWORD);
-    ESP_LOGI("INTERRUPTION", "Sx1261_InitFonction");
-    Sx1261_InitFonction_WUR(sx_parameters);
-    ESP_LOGI("INTERRUPTION", "Sx1261_WurMode");
-
-    // Start the task to handle shocks
-    xTaskCreatePinnedToCore(task_interruption, "task_interruption", 1024 * 4, NULL, 2, NULL, 1);
-}
 
 void app_main(void)
 {
@@ -231,7 +161,7 @@ void app_main(void)
     vTaskDelay(pdMS_TO_TICKS(2000));
     print_sta_ip_address();  //Print ESP ip
 
-    const char *firmware_url = "http://192.168.83.200:8000/firmware.bin";
+    const char *firmware_url = "http://192.168.22.200:8000/firmware.bin";
     if (download_firmware_from_url(firmware_url) != ESP_OK) {
         ESP_LOGE(TAG, "Failed to download firmware. OTA service not available.");
     } else {
