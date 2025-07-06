@@ -14,18 +14,20 @@
 #include "driver/rtc_io.h"
 
 #include "ra01s.h"
+#include "config.h"
+
 
 #define TAG "RA01S"
 
 #define CONFIG_MISO_GPIO 11 
 #define CONFIG_SCLK_GPIO 9 
 #define CONFIG_MOSI_GPIO 10 
-#define CONFIG_NSS_GPIO 7
-#define CONFIG_RST_GPIO 1
-#define CONFIG_BUSY_GPIO 5
-#define CONFIG_DIO1_GPIO 6
-#define CONFIG_TXEN_GPIO -1
-#define CONFIG_RXEN_GPIO -1
+//#define CONFIG_NSS_GPIO 7 //setting in config file
+//#define CONFIG_RST_GPIO 1
+//#define CONFIG_BUSY_GPIO 5
+//#define CONFIG_DIO1_GPIO 6
+//#define CONFIG_TXEN_GPIO -1
+//#define CONFIG_RXEN_GPIO -1
 #define CONFIG_SPI2_HOST 1
 
 // SPI Stuff

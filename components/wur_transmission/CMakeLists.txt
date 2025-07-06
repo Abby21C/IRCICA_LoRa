@@ -3,3 +3,5 @@ idf_component_register(
     INCLUDE_DIRS "inc"
     REQUIRES payload_manager led_status ra01s esp_timer
 )
+
+target_include_directories(${COMPONENT_LIB} PRIVATE ${PROJECT_DIR}/config)

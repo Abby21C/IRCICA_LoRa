@@ -5,10 +5,15 @@
 #include "led_strip.h"
 #include "led_status.h"
 
+#include "config.h"
+
 static const char* TAG = "PayloadMgr";
 
 extern context_t* sx_parameters;
-extern uint8_t SYNCWORD[];
+//extern const uint8_t SYNCWORD[];
+//static const uint8_t syncword[SYNCWORD_LEN] = SYNCWORD;
+
+
 
 
 // Payload data to be sent

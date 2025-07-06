@@ -1,10 +1,10 @@
-#include <stdio.h>
+#include <stdio.h> 
 #include <inttypes.h>
 #include <string.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
-#include "driver/gpio.h"
+#include "driver/gpio.h" //FIXME - check if all of these includes are needed
 #include "sx1261_WuR.h"
 #include <stdint.h>   // C99 types
 #include <stdbool.h>  // bool type
@@ -36,30 +36,31 @@
 #include "wur_transmission.h"
 #include "utils.h"
 
+#include "config.h"
+
 
 static const char *TAG = "example";
 
 #define CONFIG_EXAMPLE_MAX_ASYNC_REQUESTS 3  // Set the maximum number of concurrent asynchronous requests
-#define ASYNC_WORKER_STACK_SIZE 8192
+#define ASYNC_WORKER_STACK_SIZE 8192 //FIXME - this one can go
 
 
 
 /* Use project configuration menu (idf.py menuconfig) to choose the GPIO to blink,
    or you can edit the following line and set a number here.
 */
-#define BLINK_GPIO 48
-#define CONFIG_NSS_GPIO 7
-#define CONFIG_RST_GPIO 1
+/*#define BLINK_GPIO 48 //FIXME - put this definitions in the config file
+#define CONFIG_NSS_GPIO 7 //FIXME - you have this definition in 3 different files, put it in a config file
+#define CONFIG_RST_GPIO 1 //FIXME - same as above
 #define CONFIG_BUSY_GPIO 5
 #define CONFIG_DIO1_GPIO 6
 #define CONFIG_TXEN_GPIO -1
-#define CONFIG_RXEN_GPIO -1
+#define CONFIG_RXEN_GPIO -1 //FIXME - fix all this definitios
+*/
 
-uint8_t SYNCWORD[] = {0xae, 0xae, 0xae, 0xae, 0xae, 0xae, 0xae, 0xae};
+//uint8_t SYNCWORD[] = {0xae, 0xae, 0xae, 0xae, 0xae, 0xae, 0xae, 0xae}; //FIXME - same as above, if youre defining the same variable in multiple files, put it in a config file
+//#define MAX_BIN_SIZE (2 * 1024 * 1024)  // 2MB max firmware //FIXME - could be in the config file
 
-
-
-#define MAX_BIN_SIZE (2 * 1024 * 1024)  // 2MB max firmware
 static uint8_t *downloaded_bin = NULL;
 static size_t downloaded_bin_len = 0;
 
@@ -135,9 +136,9 @@ void app_main(void)
         err = nvs_flash_init();
     }
     ESP_ERROR_CHECK( err );
+    //FIXME - from the beggining of the main until here, you can put it in a setup function
 
-
-
+    //FIXME - from here until it download the firmware, you can put it in a function (could be called DownloadFirmware)
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 
@@ -150,8 +151,8 @@ void app_main(void)
 
     wifi_config_t wifi_config_sta = {
         .sta = {
-            .ssid = "POCOX6",   //input Wi-Fi SSID
-            .password = "22334455",  //input Wi-Fi password
+            .ssid = WIFI_STA_SSID,   //input Wi-Fi SSID
+            .password = WIFI_STA_PASS,  //input Wi-Fi password
         },
     };
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config_sta));
@@ -161,7 +162,9 @@ void app_main(void)
     vTaskDelay(pdMS_TO_TICKS(2000));
     print_sta_ip_address();  //Print ESP ip
 
-    const char *firmware_url = "http://192.168.22.200:8000/firmware.bin";
+    //const char *firmware_url = "http://192.168.22.200:8000/firmware.bin"; //FIXME - could be in the config file
+
+    const char *firmware_url = DEFAULT_FIRMWARE_URL;
     if (download_firmware_from_url(firmware_url) != ESP_OK) {
         ESP_LOGE(TAG, "Failed to download firmware. OTA service not available.");
     } else {
@@ -172,7 +175,7 @@ void app_main(void)
     ESP_LOGI(TAG, "Starting OTA update using new ota_update module...");
     start_ota_update(firmware_url);
     */
-
+    //FIXME - From here until you start the server, you can put it in a function (could be called StartServer)
     ESP_ERROR_CHECK(esp_wifi_stop());
 
     esp_netif_create_default_wifi_ap();
@@ -180,10 +183,10 @@ void app_main(void)
 
     wifi_config_t wifi_config_ap = {
             .ap = {
-                .ssid = "ESP32_HOTSPOT",
-                .ssid_len = strlen("ESP32_HOTSPOT"),
-                .password = "12345678",
-                .max_connection = 4,
+                .ssid = WIFI_AP_SSID,
+                .ssid_len = strlen(WIFI_AP_SSID),
+                .password = WIFI_AP_PASS,
+                .max_connection = WIFI_AP_MAX_CONN,
                 .authmode = WIFI_AUTH_WPA_WPA2_PSK
             },
         };
@@ -205,12 +208,14 @@ void app_main(void)
     //sx1261_init();
     /*  PARTIE WUR*/
     #ifdef TX_WUR
+        //FIXME - TX can be also a function
         sx1261_init();
         
         wur_start_tx(sx_parameters);
 
     #endif
     #ifdef RX_WUR
+    //FIXME - Can be a function too.
     ESP_LOGW(TAG, "WOKE UP DEEP SLEEP");
     sx1261_init(); 
 
@@ -231,6 +236,22 @@ void app_main(void)
     esp_deep_sleep_start();
 #endif
 
+//FIXME - If you put everything I just told you in functions, your main will have 4 lines
+/*
+app_main(){
+
+    setup(); //Initialize NVS, Wi-Fi, etc.
+    DownloadFirmware(); //Download the firmware
+    StartServer(); //Start the server and OTA service
+    if (TX_WUR) {
+        start_wur_tx(); //Start WUR transmission
+    }
+    if (RX_WUR) {
+        start_wur_rx(); //Start WUR reception
+    }
+}
+    
+*/
 
 }
 

@@ -3,3 +3,5 @@ idf_component_register(
     INCLUDE_DIRS "inc"
     REQUIRES ra01s led_strip led_status
 )
+
+target_include_directories(${COMPONENT_LIB} PRIVATE ${PROJECT_DIR}/config)

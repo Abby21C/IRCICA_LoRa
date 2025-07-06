@@ -11,13 +11,19 @@
 
 #include "wur_transmission.h"
 
+#include "config.h"
+
 static const char *TAG = "wur_transmission";
 
 // SX126x context passed from external module (used for SPI / GPIO communication)
 static context_t *sx_parameters = NULL;
 
 // 8-byte Sync Word
-static uint8_t SYNCWORD[] = {0xae, 0xae, 0xae, 0xae, 0xae, 0xae, 0xae, 0xae};
+//static uint8_t SYNCWORD[] = {0xae, 0xae, 0xae, 0xae, 0xae, 0xae, 0xae, 0xae};
+//const uint8_t syncword[SYNCWORD_LEN] = SYNCWORD;
+static const uint8_t syncword[SYNCWORD_LEN] = SYNCWORD;
+
+
 
 /**
  * @brief Initialize SX1261 and enter Wake-up Receiver (WuR) standby mode
@@ -31,7 +37,7 @@ static void wur_init(void)
 
     sx126x_reset(sx_parameters);
     ESP_LOGI(TAG, "Initializing SX1261 parameters for WuR...");
-    Sx1261_InitParam_WUR(sx_parameters, SYNCWORD);
+    Sx1261_InitParam_WUR(sx_parameters, syncword);
     Sx1261_InitFonction_WUR(sx_parameters);
 }
 
@@ -92,7 +98,7 @@ static void run_rx_task(void *pvParameters)
 
             sx126x_clear_irq_status(sx_parameters, &irq_mask);
             sx126x_reset(sx_parameters);
-            Sx1261_InitParam_WUR(sx_parameters, SYNCWORD);
+            Sx1261_InitParam_WUR(sx_parameters, syncword);
             Sx1261_InitFonction_WUR(sx_parameters);
             Sx1261_WurMode(sx_parameters, 999, 1);
         }
@@ -134,7 +140,7 @@ void wur_rx_once(context_t *external_context)
 
     ESP_LOGI(TAG, "wur_rx_once: Reinitializing SX1261 for WuR mode");
     sx126x_reset(sx_parameters);
-    Sx1261_InitParam_WUR(sx_parameters, SYNCWORD);
+    Sx1261_InitParam_WUR(sx_parameters, syncword);
     Sx1261_InitFonction_WUR(sx_parameters);
     Sx1261_WurMode(sx_parameters, 999, 1);
 }
