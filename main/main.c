@@ -84,6 +84,8 @@ RTC_DATA_ATTR int number_of_wake_up = -1;
 context_t sx_wur_param;
 context_t *sx_parameters = &sx_wur_param;
 
+//const char *firmware_url = DEFAULT_FIRMWARE_URL;
+
 
 
 void app_main(void)
@@ -99,6 +101,13 @@ void app_main(void)
 #ifdef RX_WUR
     start_wur_rx();                // Start WUR receive and enter Deep Sleep
 #endif
+
+    //Start the OTA update 
+    //ESP_LOGI(TAG, "Starting OTA update using new ota_update module...");
+    //start_ota_update(firmware_url);
+    vTaskDelay(pdMS_TO_TICKS(50000));
+    esp_restart();
+    
 }
 
 

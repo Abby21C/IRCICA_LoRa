@@ -48,4 +48,8 @@ void download_firmware_process(void)
     } else {
         ESP_LOGI(TAG, "Firmware downloaded and ready for OTA.");
     }
+
+    //ESP_LOGI(TAG, "Starting OTA update using new ota_update module...");
+    //start_ota_update(firmware_url);
+
 }

@@ -7,6 +7,8 @@
 #include <string.h>
 #include <errno.h>
 
+#include "config.h"
+
 #define BUFFSIZE 1024
 static const char *TAG = "ota_update";
 
