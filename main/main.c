@@ -49,6 +49,9 @@ static const char *TAG = "example";
 #define CONFIG_EXAMPLE_MAX_ASYNC_REQUESTS 3  // Set the maximum number of concurrent asynchronous requests
 #define ASYNC_WORKER_STACK_SIZE 8192 
 
+#define STORAGE_NAMESPACE "ota_flag"
+#define OTA_FLAG_KEY "is_updated"
+
 
 
 static uint8_t *downloaded_bin = NULL;
@@ -57,6 +60,43 @@ static size_t downloaded_bin_len = 0;
 
 
 RTC_DATA_ATTR int number_of_wake_up = -1;
+
+
+void reset_ota_flag() {   //开发期间（目前报错
+    nvs_handle_t handle;
+    esp_err_t err = nvs_open("ota_flag", NVS_READWRITE, &handle);
+    if (err == ESP_OK) {
+        nvs_erase_key(handle, "is_updated");
+        nvs_commit(handle);
+        nvs_close(handle);
+        ESP_LOGW("OTA", "OTA flag has been cleared");
+    } else {
+        ESP_LOGE("OTA", "Failed to open NVS, unable to clear OTA flag");
+    }
+}
+
+
+bool is_ota_already_done() {
+    nvs_handle_t handle;
+    esp_err_t err = nvs_open(STORAGE_NAMESPACE, NVS_READONLY, &handle);
+    if (err != ESP_OK) return false; // If reading fails, treat as "not updated"
+
+    int32_t updated = 0;
+    err = nvs_get_i32(handle, OTA_FLAG_KEY, &updated);
+    nvs_close(handle);
+    return (err == ESP_OK && updated == 1);
+}
+
+void set_ota_done_flag() {
+    nvs_handle_t handle;
+    esp_err_t err = nvs_open(STORAGE_NAMESPACE, NVS_READWRITE, &handle);
+    if (err != ESP_OK) return;
+
+    nvs_set_i32(handle, OTA_FLAG_KEY, 1);  // Write "done" flag
+    nvs_commit(handle);                   // Commit to Flash
+    nvs_close(handle);
+}
+
 
 /**
  * exemple de code utilisant la librairie lorawan, et la wur
@@ -79,7 +119,7 @@ RTC_DATA_ATTR int number_of_wake_up = -1;
 
 //#define RX_WUR
 
-#define TX_WUR
+//#define TX_WUR
 
 context_t sx_wur_param;
 context_t *sx_parameters = &sx_wur_param;
@@ -90,9 +130,15 @@ context_t *sx_parameters = &sx_wur_param;
 
 void app_main(void)
 {
-    setup_system();                 // Initialize GPIO, SPI, NVS, ISR, etc.
+    
+    setup_system();                 // Initialize GPIO, SPI, NVS, ISR, etc
+
+    //reset_ota_flag();  //only for development, to reset the OTA flag
+
+    if (!is_ota_already_done()) {
     download_firmware_process();   // Wi-Fi STA mode + firmware download
     start_ota_server();            // Switch to SoftAP + start OTA service
+    //led_status_show_color(LED_COLOR_YELLOW);
 
 #ifdef TX_WUR
     start_wur_tx();                // Start WUR transmit mode
@@ -102,12 +148,16 @@ void app_main(void)
     start_wur_rx();                // Start WUR receive and enter Deep Sleep
 #endif
 
-    //Start the OTA update 
-    //ESP_LOGI(TAG, "Starting OTA update using new ota_update module...");
-    //start_ota_update(firmware_url);
-    vTaskDelay(pdMS_TO_TICKS(50000));
-    esp_restart();
-    
+    set_ota_done_flag();
+    vTaskDelay(pdMS_TO_TICKS(60000));
+    esp_restart(); //restart the device for finishing OTA update
+    } else {
+        ESP_LOGI(TAG, "OTA already completed, skipping OTA process and entering normal business logic.");
+
+        //here to put real task logic,for example, start the main application tasks
+        start_wur_tx();
+    }
+
 }
 
 

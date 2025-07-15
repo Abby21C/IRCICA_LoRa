@@ -7,7 +7,10 @@ typedef enum {
     LED_COLOR_NONE = 0,
     LED_COLOR_WHITE,
     LED_COLOR_RED,
-    LED_COLOR_GREEN
+    LED_COLOR_GREEN,
+    LED_COLOR_PINK,
+    LED_COLOR_YELLOW
+
 } led_color_t;
 
 void led_status_init(uint8_t gpio_num);

@@ -48,6 +48,10 @@ void led_status_show_color(led_color_t color)
             led_strip_set_pixel(led_strip, 0, 48, 0, 0); break;
         case LED_COLOR_GREEN:
             led_strip_set_pixel(led_strip, 0, 0, 48, 0); break;
+        case LED_COLOR_PINK:
+            led_strip_set_pixel(led_strip, 0, 48, 0, 48); break;
+        case LED_COLOR_YELLOW:
+            led_strip_set_pixel(led_strip, 0, 48, 48, 0); break;
         default:
             led_strip_clear(led_strip); break;
     }
