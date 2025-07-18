@@ -48,6 +48,6 @@ void start_wur_rx(void)
 
     esp_sleep_enable_ext1_wakeup(ext_wakeup_pins_mask, ESP_EXT1_WAKEUP_ANY_HIGH);
 
-    ESP_LOGW(TAG, "Going to deep sleep...");
-    esp_deep_sleep_start();
+    //ESP_LOGW(TAG, "Going to deep sleep..."); // Uncomment to enable deep sleep
+    //esp_deep_sleep_start();   
 }

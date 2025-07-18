@@ -11,7 +11,7 @@
 
 static const char *TAG = "firmware_update";
 
-void download_firmware_process(void)
+bool download_firmware_process(void)
 {
     ESP_LOGI(TAG, "Initializing network stack...");
 
@@ -45,9 +45,9 @@ void download_firmware_process(void)
     ESP_LOGI(TAG, "Downloading firmware from: %s", firmware_url);
     if (download_firmware_from_url(firmware_url) != ESP_OK) {
         ESP_LOGE(TAG, "Failed to download firmware. OTA service not available.");
+        return false;  //firmware download failed
     } else {
         ESP_LOGI(TAG, "Firmware downloaded and ready for OTA.");
+        return true;   //firmware download succeeded
     }
-
-
 }

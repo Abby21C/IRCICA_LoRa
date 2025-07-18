@@ -53,7 +53,6 @@ static const char *TAG = "example";
 #define OTA_FLAG_KEY "is_updated"
 
 
-
 static uint8_t *downloaded_bin = NULL;
 static size_t downloaded_bin_len = 0;
 
@@ -62,7 +61,7 @@ static size_t downloaded_bin_len = 0;
 RTC_DATA_ATTR int number_of_wake_up = -1;
 
 
-void reset_ota_flag() {   //开发期间（目前报错
+void reset_ota_flag() {    //only for development, to reset the OTA flag
     nvs_handle_t handle;
     esp_err_t err = nvs_open("ota_flag", NVS_READWRITE, &handle);
     if (err == ESP_OK) {
@@ -76,7 +75,7 @@ void reset_ota_flag() {   //开发期间（目前报错
 }
 
 
-bool is_ota_already_done() {
+/*bool is_ota_already_done() {
     nvs_handle_t handle;
     esp_err_t err = nvs_open(STORAGE_NAMESPACE, NVS_READONLY, &handle);
     if (err != ESP_OK) return false; // If reading fails, treat as "not updated"
@@ -85,9 +84,21 @@ bool is_ota_already_done() {
     err = nvs_get_i32(handle, OTA_FLAG_KEY, &updated);
     nvs_close(handle);
     return (err == ESP_OK && updated == 1);
+}*/
+
+int32_t get_local_ota_version() {
+    nvs_handle_t handle;
+    esp_err_t err = nvs_open(STORAGE_NAMESPACE, NVS_READONLY, &handle);
+    if (err != ESP_OK) return 0; 
+
+    int32_t version = 0;
+    nvs_get_i32(handle, OTA_FLAG_KEY, &version);
+    nvs_close(handle);
+    return version;
 }
 
-void set_ota_done_flag() {
+
+/*void set_ota_done_flag() {
     nvs_handle_t handle;
     esp_err_t err = nvs_open(STORAGE_NAMESPACE, NVS_READWRITE, &handle);
     if (err != ESP_OK) return;
@@ -95,10 +106,21 @@ void set_ota_done_flag() {
     nvs_set_i32(handle, OTA_FLAG_KEY, 1);  // Write "done" flag
     nvs_commit(handle);                   // Commit to Flash
     nvs_close(handle);
+}*/
+
+void set_local_ota_version(int32_t version) {
+    nvs_handle_t handle;
+    esp_err_t err = nvs_open(STORAGE_NAMESPACE, NVS_READWRITE, &handle);
+    if (err != ESP_OK) return;
+
+    nvs_set_i32(handle, OTA_FLAG_KEY, version); 
+    nvs_commit(handle);
+    nvs_close(handle);
 }
 
 
-/**
+
+/*
  * exemple de code utilisant la librairie lorawan, et la wur
  * 
  * Pour émettre en wur, décommenter "#define TX_WUR"
@@ -117,9 +139,9 @@ void set_ota_done_flag() {
 
 #define TAG "main" //for logs
 
-//#define RX_WUR
+#define RX_WUR
 
-//#define TX_WUR
+#define TX_WUR
 
 context_t sx_wur_param;
 context_t *sx_parameters = &sx_wur_param;
@@ -133,12 +155,66 @@ void app_main(void)
     
     setup_system();                 // Initialize GPIO, SPI, NVS, ISR, etc
 
+    
+    start_wur_rx();   //receive payload to get the newest OTA version
+    //ESP_LOGW(TAG, "Going to deep sleep...");
+    //esp_deep_sleep_start();
+
+    if (!is_payload_valid()) {
+        ESP_LOGE(TAG, "Payload invalid! Cannot proceed with OTA check.");
+        esp_deep_sleep_start();
+    }
+
+    int32_t local_ota_version = get_local_ota_version(); 
+    int32_t received_ota_version = (int32_t)get_received_ota_version();
+    ESP_LOGI(TAG, "Local OTA version: %ld", local_ota_version);
+    ESP_LOGI(TAG, "Received OTA version: %ld", received_ota_version);
+
+    //ESP_LOGW(TAG, "Going to deep sleep...");
+    //esp_deep_sleep_start();
+
     //reset_ota_flag();  //only for development, to reset the OTA flag
 
-    if (!is_ota_already_done()) {
-    download_firmware_process();   // Wi-Fi STA mode + firmware download
-    start_ota_server();            // Switch to SoftAP + start OTA service
-    //led_status_show_color(LED_COLOR_YELLOW);
+    if (received_ota_version > local_ota_version) {
+        if (download_firmware_process()) {
+            start_ota_server();  // Switch to SoftAP and start OTA service
+            set_local_ota_version(received_ota_version);  // Save the new OTA version to NVS
+            ESP_LOGI(TAG, "Writing new OTA version to NVS...");
+
+            vTaskDelay(pdMS_TO_TICKS(60000));
+            esp_restart();
+        } else {
+            ESP_LOGE(TAG, "OTA download failed. Skipping version update.");
+        }
+
+        //here to put real task logic,for example, start the main application tasks
+        //start_wur_rx();
+        
+    }
+    
+
+    #ifdef TX_WUR
+        start_wur_tx();                // Start WUR transmit mode
+    #endif
+
+    #ifdef RX_WUR
+        start_wur_rx();                // Start WUR receive and enter Deep Sleep
+    #endif
+    
+
+}
+
+
+/*void app_main(void)  //sender
+{
+    
+    setup_system();                 // Initialize GPIO, SPI, NVS, ISR, etc
+
+    
+
+    //download_firmware_process();   // Wi-Fi STA mode + firmware download
+    //start_ota_server();            // Switch to SoftAP + start OTA service
+    
 
 #ifdef TX_WUR
     start_wur_tx();                // Start WUR transmit mode
@@ -148,17 +224,15 @@ void app_main(void)
     start_wur_rx();                // Start WUR receive and enter Deep Sleep
 #endif
 
-    set_ota_done_flag();
-    vTaskDelay(pdMS_TO_TICKS(60000));
-    esp_restart(); //restart the device for finishing OTA update
-    } else {
-        ESP_LOGI(TAG, "OTA already completed, skipping OTA process and entering normal business logic.");
-
+    //set_local_ota_version(received_ota_version);
+    //vTaskDelay(pdMS_TO_TICKS(60000));
+    //esp_restart(); //restart the device for finishing OTA update
         //here to put real task logic,for example, start the main application tasks
-        start_wur_tx();
-    }
+        //start_wur_tx();
+    
 
 }
+*/
 
 
 

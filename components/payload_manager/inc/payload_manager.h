@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -13,7 +14,8 @@ typedef enum {
     PAYLOAD_TYPE_ALLINFO = 0,
     PAYLOAD_TYPE_LED_WHITE = 1,
     PAYLOAD_TYPE_LED_RED   = 2,
-    PAYLOAD_TYPE_LED_GREEN = 3
+    PAYLOAD_TYPE_LED_GREEN = 3,
+    PAYLOAD_TYPE_OTA_VERSION = 4
 } payload_type_t;
 
 
@@ -24,6 +26,10 @@ void send_payload(payload_type_t type);
 void receive_payload(void);
 
 payload_type_t get_last_received_payload_type(void);
+
+uint8_t get_received_ota_version(void);
+
+bool is_payload_valid(void);
 
 #ifdef __cplusplus
 }

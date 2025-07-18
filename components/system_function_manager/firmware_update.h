@@ -1,6 +1,8 @@
 #ifndef FIRMWARE_UPDATE_H
 #define FIRMWARE_UPDATE_H
 
+#include <stdbool.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -16,7 +18,7 @@ extern "C" {
  *
  * If the download fails, the system will log an error and skip OTA initialization.
  */
-void download_firmware_process(void);
+bool download_firmware_process(void);
 
 #ifdef __cplusplus
 }

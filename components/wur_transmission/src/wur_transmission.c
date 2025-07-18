@@ -24,6 +24,9 @@ static context_t *sx_parameters = NULL;
 static const uint8_t syncword[SYNCWORD_LEN] = SYNCWORD;
 
 
+//#define PAYLOAD_TYPE_OTA_VERSION 0x04
+
+
 
 /**
  * @brief Initialize SX1261 and enter Wake-up Receiver (WuR) standby mode
@@ -50,7 +53,7 @@ static void run_tx_task(void *pvParameters)
 
     while (1)
     {
-        send_payload(PAYLOAD_TYPE_LED_RED); 
+        send_payload(PAYLOAD_TYPE_OTA_VERSION); 
         ESP_LOGI(TAG, "TX: Payload sent, count = %d", ++counter);
         vTaskDelay(pdMS_TO_TICKS(10000));
     }
