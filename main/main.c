@@ -52,6 +52,9 @@ static const char *TAG = "example";
 #define STORAGE_NAMESPACE "ota_flag"
 #define OTA_FLAG_KEY "is_updated"
 
+#define OTA_RECEIVED_VERSION_KEY "rx_version" // Key for storing the received OTA version by payload
+
+
 
 static uint8_t *downloaded_bin = NULL;
 static size_t downloaded_bin_len = 0;
@@ -119,6 +122,26 @@ void set_local_ota_version(int32_t version) {
 }
 
 
+void set_received_ota_version(int32_t version) {
+    nvs_handle_t handle;
+    if (nvs_open(STORAGE_NAMESPACE, NVS_READWRITE, &handle) == ESP_OK) {
+        nvs_set_i32(handle, OTA_RECEIVED_VERSION_KEY, version);
+        nvs_commit(handle);
+        nvs_close(handle);
+    }
+}
+
+int32_t get_received_ota_version_from_nvs() {
+    nvs_handle_t handle;
+    int32_t version = 0;
+    if (nvs_open(STORAGE_NAMESPACE, NVS_READONLY, &handle) == ESP_OK) {
+        nvs_get_i32(handle, OTA_RECEIVED_VERSION_KEY, &version);
+        nvs_close(handle);
+    }
+    return version;
+}
+
+
 
 /*
  * exemple de code utilisant la librairie lorawan, et la wur
@@ -139,9 +162,9 @@ void set_local_ota_version(int32_t version) {
 
 #define TAG "main" //for logs
 
-#define RX_WUR
+//#define RX_WUR
 
-#define TX_WUR
+//#define TX_WUR
 
 context_t sx_wur_param;
 context_t *sx_parameters = &sx_wur_param;
@@ -150,7 +173,7 @@ context_t *sx_parameters = &sx_wur_param;
 
 
 
-void app_main(void)
+void app_main(void)  //stable version
 {
     
     setup_system();                 // Initialize GPIO, SPI, NVS, ISR, etc
@@ -184,7 +207,7 @@ void app_main(void)
             vTaskDelay(pdMS_TO_TICKS(60000));
             esp_restart();
         } else {
-            ESP_LOGE(TAG, "OTA download failed. Skipping version update.");
+            ESP_LOGE(TAG, "OTA already completed, skipping OTA process and entering normal business logic.");
         }
 
         //here to put real task logic,for example, start the main application tasks
@@ -203,6 +226,7 @@ void app_main(void)
     
 
 }
+
 
 
 /*void app_main(void)  //sender
@@ -231,8 +255,7 @@ void app_main(void)
         //start_wur_tx();
     
 
-}
-*/
+}*/
 
 
 

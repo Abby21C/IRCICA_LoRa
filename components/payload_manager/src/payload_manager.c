@@ -68,7 +68,7 @@ void send_payload(payload_type_t type) {
             length = sizeof(PAYLOAD_LED_GREEN);
             break;
         case PAYLOAD_TYPE_OTA_VERSION:
-            send_ota_version_payload(7); 
+            send_ota_version_payload(14); 
             return;
         default:
             ESP_LOGW(TAG, "Unknown payload type.");
