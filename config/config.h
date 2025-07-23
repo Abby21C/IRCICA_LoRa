@@ -17,11 +17,14 @@
 
 // ==== OTA Parameters ====
 #define MAX_BIN_SIZE       (2 * 1024 * 1024)
-#define DEFAULT_FIRMWARE_URL "http://192.168.22.200:8000/firmware.bin"
+//#define DEFAULT_FIRMWARE_URL "http://192.168.22.200:8000/firmware.bin"
+#define DEFAULT_FIRMWARE_URL "http://192.168.4.1/firmware.bin"
 
 // ==== WiFi ====
-#define WIFI_STA_SSID      "POCOX6"
-#define WIFI_STA_PASS      "22334455"
+//#define WIFI_STA_SSID      "POCOX6"
+//#define WIFI_STA_PASS      "22334455"
+#define WIFI_STA_SSID      "ESP32_HOTSPOT"
+#define WIFI_STA_PASS      "12345678"
 #define WIFI_AP_SSID       "ESP32_HOTSPOT"
 #define WIFI_AP_PASS       "12345678"
 #define WIFI_AP_MAX_CONN   4
