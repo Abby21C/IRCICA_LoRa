@@ -68,7 +68,7 @@ void send_payload(payload_type_t type) {
             length = sizeof(PAYLOAD_LED_GREEN);
             break;
         case PAYLOAD_TYPE_OTA_VERSION:
-            send_ota_version_payload(18); 
+            send_ota_version_payload(24);  //input the OTA version here
             return;
         default:
             ESP_LOGW(TAG, "Unknown payload type.");
@@ -92,11 +92,6 @@ void receive_payload(void) {
     for (int i = 0; i < rx_status.pld_len_in_bytes; i++) {
         ESP_LOGI(TAG, "Byte[%d] = 0x%02X", i, received_payload[i]);
     }
-
-    /*if (rx_status.pld_len_in_bytes < 1) {
-        ESP_LOGW(TAG, "Received empty payload.");
-        return;
-    }*/
 
     if (rx_status.pld_len_in_bytes < 1) {
     ESP_LOGW(TAG, "Received empty payload.");

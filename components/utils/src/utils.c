@@ -16,16 +16,8 @@
 // Pointer defined in the main function
 extern context_t *sx_parameters;
 
-// Global 8-byte sync word array
-//extern const uint8_t SYNCWORD[];
-//const uint8_t syncword[SYNCWORD_LEN] = SYNCWORD;
-//static const uint8_t syncword[SYNCWORD_LEN] = SYNCWORD;
-
-
 
 #define TAG "utils"
-//#define CONFIG_DIO1_GPIO 6
-//#define CONFIG_NSS_GPIO 7
 
 void print_sta_ip_address(void)
 {

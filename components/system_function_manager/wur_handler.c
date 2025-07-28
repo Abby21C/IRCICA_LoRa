@@ -11,9 +11,6 @@
 static const char *TAG = "wur_handler";
 extern int number_of_wake_up;
 
-// Global context parameters (can be externally provided if needed)
-//context_t sx_wur_param;
-//context_t *sx_parameters = &sx_wur_param;
 extern context_t *sx_parameters;
 
 

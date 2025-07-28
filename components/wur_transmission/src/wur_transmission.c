@@ -19,12 +19,7 @@ static const char *TAG = "wur_transmission";
 static context_t *sx_parameters = NULL;
 
 // 8-byte Sync Word
-//static uint8_t SYNCWORD[] = {0xae, 0xae, 0xae, 0xae, 0xae, 0xae, 0xae, 0xae};
-//const uint8_t syncword[SYNCWORD_LEN] = SYNCWORD;
 static const uint8_t syncword[SYNCWORD_LEN] = SYNCWORD;
-
-
-//#define PAYLOAD_TYPE_OTA_VERSION 0x04
 
 
 

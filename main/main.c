@@ -78,7 +78,7 @@ void reset_ota_flag() {    //only for development, to reset the OTA flag
 }
 
 
-int32_t get_local_ota_version() {
+int32_t get_local_ota_version() {  // Get the local OTA version from NVS
     nvs_handle_t handle;
     esp_err_t err = nvs_open(STORAGE_NAMESPACE, NVS_READONLY, &handle);
     if (err != ESP_OK) return 0; 
@@ -90,7 +90,7 @@ int32_t get_local_ota_version() {
 }
 
 
-void set_local_ota_version(int32_t version) {
+void set_local_ota_version(int32_t version) {  // Set the local OTA version in NVS
     nvs_handle_t handle;
     esp_err_t err = nvs_open(STORAGE_NAMESPACE, NVS_READWRITE, &handle);
     if (err != ESP_OK) return;
@@ -101,7 +101,7 @@ void set_local_ota_version(int32_t version) {
 }
 
 
-void set_received_ota_version(int32_t version) {
+void set_received_ota_version(int32_t version) {  // Set the received OTA version in NVS
     nvs_handle_t handle;
     if (nvs_open(STORAGE_NAMESPACE, NVS_READWRITE, &handle) == ESP_OK) {
         nvs_set_i32(handle, OTA_RECEIVED_VERSION_KEY, version);
@@ -110,7 +110,7 @@ void set_received_ota_version(int32_t version) {
     }
 }
 
-int32_t get_received_ota_version_from_nvs() {
+int32_t get_received_ota_version_from_nvs() {  // Get the received OTA version from NVS
     nvs_handle_t handle;
     int32_t version = 0;
     if (nvs_open(STORAGE_NAMESPACE, NVS_READONLY, &handle) == ESP_OK) {
@@ -148,8 +148,6 @@ int32_t get_received_ota_version_from_nvs() {
 context_t sx_wur_param;
 context_t *sx_parameters = &sx_wur_param;
 
-//const char *firmware_url = DEFAULT_FIRMWARE_URL;
-
 
 
 void app_main(void) 
@@ -161,20 +159,22 @@ void app_main(void)
     
     start_wur_rx();   //receive payload to get the newest OTA version
 
-
-    if (!is_payload_valid()) {
+    // Validate the received payload format; if invalid, go back to deep sleep and wait for the next wake-up
+    if (!is_payload_valid()) {  
         ESP_LOGE(TAG, "Payload invalid! Cannot proceed with OTA check.");
         esp_deep_sleep_start();
     }
 
-    int32_t local_ota_version = get_local_ota_version(); 
-    int32_t received_ota_version = (int32_t)get_received_ota_version();
+    int32_t local_ota_version = get_local_ota_version(); //Read the current OTA version from NVS
+    int32_t received_ota_version = (int32_t)get_received_ota_version();  // Read the received OTA version from payload
     ESP_LOGI(TAG, "Local OTA version: %ld", local_ota_version);
     ESP_LOGI(TAG, "Received OTA version: %ld", received_ota_version);
 
     //ESP_LOGW(TAG, "Going to deep sleep...");
     //esp_deep_sleep_start();  
 
+    // Compare received OTA version with local version
+    // If the received version is newer, attempt to download and apply the update
     if (received_ota_version > local_ota_version) {
         if (download_firmware_process()) {
             start_ota_server();  // Switch to SoftAP and start OTA service
@@ -185,9 +185,11 @@ void app_main(void)
             esp_restart(); //testing never shutdown
         } else {
             ESP_LOGE(TAG, "OTA already completed, skipping OTA process and entering normal business logic.");
+            vTaskDelay(pdMS_TO_TICKS(3000));  // Wait for 3 seconds before proceeding
+            esp_deep_sleep_start();  // If OTA failed, enter deep sleep waiting for next wake-up
         }
 
-        //here to put real task logic,for example, start the main application tasks
+        //Main Tasks: here to put real task logic,for example, start the main application tasks
         //start_wur_rx();
         
     }
@@ -204,7 +206,8 @@ void app_main(void)
 
 }
 
-/*void app_main(void)  //sender
+//Sender, for testing purposes, the payload transmission feature can be integrated into the real project
+/*void app_main(void)  
 {
     
     setup_system();                 // Initialize GPIO, SPI, NVS, ISR, etc
